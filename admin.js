@@ -774,9 +774,28 @@ async function loadFraudData(meetingId) {
   const fraudData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   const tbody = document.getElementById('fraud-tbody');
   tbody.innerHTML = '';
+
+  // Cập nhật header nếu Super Admin
+  const fraudTheadRow = document.querySelector('#tab-fraud thead tr');
+  if (fraudTheadRow && isSuperAdmin && !fraudTheadRow.querySelector('.th-fraud-edit')) {
+    const th = document.createElement('th');
+    th.className = 'th-fraud-edit';
+    th.textContent = '👑 Xử lý';
+    fraudTheadRow.appendChild(th);
+  }
+
   fraudData.forEach(f => {
     const meeting = allMeetings.find(m => m.id === f.meetingId);
     const tr = document.createElement('tr');
+    const superAdminActions = isSuperAdmin ? `
+      <td style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn-edit" style="font-size:11px;padding:4px 8px"
+          onclick="clearFraud('${f.id}','present')">✅ Duyệt có mặt</button>
+        <button class="btn-edit" style="font-size:11px;padding:4px 8px;background:#f59e0b"
+          onclick="clearFraud('${f.id}','excused')">📝 Có phép</button>
+        <button class="btn-danger" style="font-size:11px;padding:4px 8px"
+          onclick="deleteFraud('${f.id}')">🗑️ Xóa</button>
+      </td>` : '';
     tr.innerHTML = `
       <td>${meeting?.name || f.meetingId}</td>
       <td>${f.memberName || '--'}</td>
@@ -784,11 +803,46 @@ async function loadFraudData(meetingId) {
       <td style="color:#ef4444;font-size:12px">${f.email || '--'}</td>
       <td><span class="badge badge-fraud">${f.fraudType || 'Email không khớp'}</span></td>
       <td style="font-size:12px">${formatDateTime(f.timestamp)}</td>
+      ${superAdminActions}
     `;
     tbody.appendChild(tr);
   });
   if (!fraudData.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#10b981;padding:32px">✅ Không phát hiện gian lận</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#10b981;padding:32px">✅ Không phát hiện gian lận</td></tr>';
+  }
+}
+
+// Super Admin: Duyệt bỏ gian lận → chuyển thành điểm danh hợp lệ
+async function clearFraud(attendanceId, newStatus) {
+  const statusText = newStatus === 'present' ? 'có mặt' : 'vắng có phép';
+  if (!confirm(`Xác nhận duyệt trường hợp này thành "${statusText}"?`)) return;
+  try {
+    await db.collection('attendances').doc(attendanceId).update({
+      isFraud: false,
+      fraudType: '',
+      status: newStatus,
+      clearedBy: auth.currentUser?.email,
+      clearedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    showToast(`✅ Đã duyệt thành ${statusText}!`);
+    await loadFraudData(document.getElementById('fraud-meeting-filter').value || null);
+    // Reload dashboard nếu đang xem cùng cuộc họp
+    if (currentMeetingId) await loadAttendances();
+    renderDashboard();
+  } catch (e) {
+    showToast('Lỗi: ' + e.message, 'error');
+  }
+}
+
+// Super Admin: Xóa hẳn bản ghi gian lận
+async function deleteFraud(attendanceId) {
+  if (!confirm('Xóa hẳn bản ghi này?')) return;
+  try {
+    await db.collection('attendances').doc(attendanceId).delete();
+    showToast('🗑️ Đã xóa bản ghi!');
+    await loadFraudData(document.getElementById('fraud-meeting-filter').value || null);
+  } catch (e) {
+    showToast('Lỗi: ' + e.message, 'error');
   }
 }
 
@@ -796,3 +850,4 @@ async function loadFraudData(meetingId) {
 document.querySelector('[data-tab="fraud"]').addEventListener('click', () => {
   loadFraudData(null);
 });
+
