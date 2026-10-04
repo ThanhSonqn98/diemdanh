@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Hệ thống Điểm Danh</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+</head>
+<body>
+  <div id="login-screen" class="login-screen">
+    <div class="login-card">
+      <div class="login-logo">📋</div>
+      <h2>Hệ thống Điểm Danh</h2>
+      <p>Đăng nhập Admin</p>
+      <button id="btn-admin-login" class="btn-google">
+        <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Đăng nhập với Google
+      </button>
+    </div>
+  </div>
+
+  <div id="app" class="hidden">
+    <nav class="navbar">
+      <div class="nav-brand">📋 Điểm Danh QR</div>
+      <div class="nav-tabs">
+        <button class="nav-tab active" data-tab="dashboard">📊 Dashboard</button>
+        <button class="nav-tab" data-tab="create-qr">🔳 Tạo QR</button>
+        <button class="nav-tab" data-tab="members">👥 Thành viên</button>
+        <button class="nav-tab" data-tab="summary">📈 Tổng kết</button>
+        <button class="nav-tab" data-tab="fraud">⚠️ Gian lận</button>
+      </div>
+      <div class="nav-user">
+        <img id="user-avatar" src="" alt="" class="user-avatar">
+        <span id="user-name"></span>
+        <button id="btn-logout" class="btn-logout">Đăng xuất</button>
+      </div>
+    </nav>
+
+    <!-- TAB DASHBOARD -->
+    <div id="tab-dashboard" class="tab-content active">
+      <div class="container">
+        <div class="page-header">
+          <h1>📊 Kết quả Điểm Danh</h1>
+          <div class="header-controls">
+            <select id="filter-meeting" class="select-control">
+              <option value="">-- Chọn cuộc họp --</option>
+            </select>
+            <button id="btn-refresh" class="btn-secondary">🔄 Làm mới</button>
+          </div>
+        </div>
+
+        <div id="meeting-info" class="meeting-info hidden">
+          <span id="meeting-title"></span>
+          <span id="meeting-time"></span>
+          <span id="meeting-status"></span>
+        </div>
+
+        <!-- Tổng quan -->
+        <div class="stats-grid">
+          <div class="stat-card total">
+            <div class="stat-icon">👥</div>
+            <div class="stat-info">
+              <div class="stat-label">Tổng số</div>
+              <div class="stat-value" id="stat-total">0</div>
+            </div>
+          </div>
+          <div class="stat-card present">
+            <div class="stat-icon">✅</div>
+            <div class="stat-info">
+              <div class="stat-label">Có mặt</div>
+              <div class="stat-value" id="stat-present">0</div>
+            </div>
+          </div>
+          <div class="stat-card absent">
+            <div class="stat-icon">❌</div>
+            <div class="stat-info">
+              <div class="stat-label">Vắng</div>
+              <div class="stat-value" id="stat-absent">0</div>
+            </div>
+          </div>
+          <div class="stat-card excused">
+            <div class="stat-icon">📝</div>
+            <div class="stat-info">
+              <div class="stat-label">Có phép</div>
+              <div class="stat-value" id="stat-excused">0</div>
+            </div>
+          </div>
+          <div class="stat-card unexcused">
+            <div class="stat-icon">🚫</div>
+            <div class="stat-info">
+              <div class="stat-label">Không phép</div>
+              <div class="stat-value" id="stat-unexcused">0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bảng theo tổ -->
+        <div class="groups-grid">
+          <div class="group-card" data-group="to123">
+            <div class="group-header">🏢 Tổ 1-2-3</div>
+            <div class="group-stats">
+              <div class="gs-item"><span>Tổng:</span> <strong id="g-to123-total">0</strong></div>
+              <div class="gs-item present"><span>Có mặt:</span> <strong id="g-to123-present">0</strong></div>
+              <div class="gs-item absent"><span>Vắng có phép:</span> <strong id="g-to123-excused">0</strong></div>
+              <div class="gs-item unexcused"><span>Vắng K.phép:</span> <strong id="g-to123-unexcused">0</strong></div>
+            </div>
+            <button class="btn-view-detail" data-group="to123">Xem chi tiết</button>
+          </div>
+          <div class="group-card" data-group="to45">
+            <div class="group-header">🏢 Tổ 4-5</div>
+            <div class="group-stats">
+              <div class="gs-item"><span>Tổng:</span> <strong id="g-to45-total">0</strong></div>
+              <div class="gs-item present"><span>Có mặt:</span> <strong id="g-to45-present">0</strong></div>
+              <div class="gs-item absent"><span>Vắng có phép:</span> <strong id="g-to45-excused">0</strong></div>
+              <div class="gs-item unexcused"><span>Vắng K.phép:</span> <strong id="g-to45-unexcused">0</strong></div>
+            </div>
+            <button class="btn-view-detail" data-group="to45">Xem chi tiết</button>
+          </div>
+          <div class="group-card" data-group="tobomon">
+            <div class="group-header">📚 Tổ Bộ Môn</div>
+            <div class="group-stats">
+              <div class="gs-item"><span>Tổng:</span> <strong id="g-tobomon-total">0</strong></div>
+              <div class="gs-item present"><span>Có mặt:</span> <strong id="g-tobomon-present">0</strong></div>
+              <div class="gs-item absent"><span>Vắng có phép:</span> <strong id="g-tobomon-excused">0</strong></div>
+              <div class="gs-item unexcused"><span>Vắng K.phép:</span> <strong id="g-tobomon-unexcused">0</strong></div>
+            </div>
+            <button class="btn-view-detail" data-group="tobomon">Xem chi tiết</button>
+          </div>
+          <div class="group-card" data-group="tovanphong">
+            <div class="group-header">🏛️ Tổ Văn Phòng</div>
+            <div class="group-stats">
+              <div class="gs-item"><span>Tổng:</span> <strong id="g-tovanphong-total">0</strong></div>
+              <div class="gs-item present"><span>Có mặt:</span> <strong id="g-tovanphong-present">0</strong></div>
+              <div class="gs-item absent"><span>Vắng có phép:</span> <strong id="g-tovanphong-excused">0</strong></div>
+              <div class="gs-item unexcused"><span>Vắng K.phép:</span> <strong id="g-tovanphong-unexcused">0</strong></div>
+            </div>
+            <button class="btn-view-detail" data-group="tovanphong">Xem chi tiết</button>
+          </div>
+        </div>
+
+        <!-- Chi tiết điểm danh -->
+        <div class="detail-section">
+          <div class="detail-header">
+            <h2 id="detail-group-title">Chi tiết điểm danh</h2>
+            <button id="btn-export" class="btn-export">📥 Xuất Excel</button>
+          </div>
+          <div class="table-wrapper">
+            <table id="attendance-table" class="data-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Họ tên</th>
+                  <th>Tổ</th>
+                  <th>Trạng thái</th>
+                  <th>Email</th>
+                  <th>Thời gian</th>
+                  <th>Ghi chú</th>
+                </tr>
+              </thead>
+              <tbody id="attendance-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB TẠO QR -->
+    <div id="tab-create-qr" class="tab-content">
+      <div class="container">
+        <div class="page-header">
+          <h1>🔳 Tạo QR Cuộc họp</h1>
+        </div>
+        <div class="qr-creator">
+          <div class="qr-form">
+            <div class="form-group">
+              <label>Tên cuộc họp *</label>
+              <input type="text" id="meeting-name" placeholder="VD: Họp Hội đồng tháng 10/2026" class="form-control">
+            </div>
+            <div class="form-group">
+              <label>Thời gian bắt đầu *</label>
+              <input type="datetime-local" id="meeting-start" class="form-control">
+            </div>
+            <div class="form-group">
+              <label>Thời gian kết thúc hiệu lực QR *</label>
+              <input type="datetime-local" id="meeting-end" class="form-control">
+              <small class="form-hint">⚠️ Sau thời gian này, QR sẽ hết hạn và không thể điểm danh</small>
+            </div>
+            <div class="form-group">
+              <label>Ghi chú (tuỳ chọn)</label>
+              <textarea id="meeting-note" placeholder="Thông tin bổ sung..." class="form-control" rows="3"></textarea>
+            </div>
+            <button id="btn-create-qr" class="btn-primary">🔳 Tạo QR Code</button>
+          </div>
+
+          <div class="qr-result hidden" id="qr-result">
+            <div class="qr-preview">
+              <h3 id="qr-meeting-name"></h3>
+              <div id="qr-code-display"></div>
+              <div class="qr-meta">
+                <p id="qr-time-info"></p>
+                <p class="qr-expire" id="qr-expire-info"></p>
+              </div>
+              <div class="qr-actions">
+                <button id="btn-download-qr" class="btn-primary">📥 Tải ảnh QR</button>
+                <button id="btn-copy-link" class="btn-secondary">🔗 Copy link</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Danh sách cuộc họp đã tạo -->
+        <div class="meetings-list-section">
+          <h2>📋 Các cuộc họp đã tạo</h2>
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tên cuộc họp</th>
+                  <th>Bắt đầu</th>
+                  <th>Hết hạn QR</th>
+                  <th>Đã điểm danh</th>
+                  <th>Trạng thái</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="meetings-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB THÀNH VIÊN -->
+    <div id="tab-members" class="tab-content">
+      <div class="container">
+        <div class="page-header">
+          <h1>👥 Quản lý Thành viên</h1>
+          <div class="header-controls">
+            <button id="btn-add-member" class="btn-primary">➕ Thêm thành viên</button>
+            <label class="btn-secondary" style="cursor:pointer">
+              📥 Import Excel
+              <input type="file" id="import-excel" accept=".xlsx,.xls" hidden>
+            </label>
+            <button id="btn-export-template" class="btn-secondary">📄 Tải mẫu Excel</button>
+          </div>
+        </div>
+
+        <!-- Form thêm/sửa thành viên -->
+        <div id="member-form-section" class="form-section hidden">
+          <h3 id="member-form-title">Thêm thành viên</h3>
+          <div class="member-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Họ và tên *</label>
+                <input type="text" id="member-name" placeholder="Nguyễn Văn A" class="form-control">
+              </div>
+              <div class="form-group">
+                <label>Email *</label>
+                <input type="email" id="member-email" placeholder="example@gmail.com" class="form-control">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Tổ *</label>
+                <select id="member-group" class="form-control">
+                  <option value="">-- Chọn tổ --</option>
+                  <option value="to123">Tổ 1-2-3</option>
+                  <option value="to45">Tổ 4-5</option>
+                  <option value="tobomon">Tổ Bộ Môn</option>
+                  <option value="tovanphong">Tổ Văn Phòng</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Chức vụ</label>
+                <input type="text" id="member-role" placeholder="Giáo viên" class="form-control">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button id="btn-save-member" class="btn-primary">💾 Lưu</button>
+              <button id="btn-cancel-member" class="btn-secondary">Hủy</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Họ tên</th>
+                <th>Email</th>
+                <th>Tổ</th>
+                <th>Chức vụ</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="members-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB TỔNG KẾT -->
+    <div id="tab-summary" class="tab-content">
+      <div class="container">
+        <div class="page-header">
+          <h1>📈 Tổng kết theo tháng</h1>
+          <div class="header-controls">
+            <select id="summary-month" class="select-control">
+            </select>
+            <select id="summary-year" class="select-control">
+            </select>
+            <button id="btn-load-summary" class="btn-primary">📊 Xem tổng kết</button>
+            <button id="btn-export-summary" class="btn-secondary">📥 Xuất Excel</button>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table" id="summary-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Họ tên</th>
+                <th>Tổ</th>
+                <th>Tổng họp</th>
+                <th>Có mặt</th>
+                <th>Vắng có phép</th>
+                <th>Vắng K.phép</th>
+                <th>Tỷ lệ chuyên cần</th>
+              </tr>
+            </thead>
+            <tbody id="summary-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB GIAN LẬN -->
+    <div id="tab-fraud" class="tab-content">
+      <div class="container">
+        <div class="page-header">
+          <h1>⚠️ Phát hiện Gian lận</h1>
+          <div class="header-controls">
+            <select id="fraud-meeting-filter" class="select-control">
+              <option value="">-- Tất cả cuộc họp --</option>
+            </select>
+          </div>
+        </div>
+        <div class="fraud-info">
+          <div class="info-box">
+            <strong>🔍 Cơ chế phát hiện gian lận:</strong>
+            <ul>
+              <li>Email thiết bị đăng nhập Google khác với email đã đăng ký trong hệ thống</li>
+              <li>Một email điểm danh cho nhiều tên khác nhau trong cùng cuộc họp</li>
+              <li>Điểm danh sau khi QR đã hết hạn</li>
+            </ul>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Cuộc họp</th>
+                <th>Tên khai báo</th>
+                <th>Email khai báo</th>
+                <th>Email đăng nhập thực</th>
+                <th>Loại gian lận</th>
+                <th>Thời gian</th>
+              </tr>
+            </thead>
+            <tbody id="fraud-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal chi tiết -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title">Chi tiết</h3>
+        <button id="modal-close" class="modal-close">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="firebase-init.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

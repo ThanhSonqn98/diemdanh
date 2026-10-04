@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Điểm Danh</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+</head>
+<body>
+  <div class="attendance-page">
+    <div class="attendance-card">
+
+      <!-- Loading -->
+      <div id="screen-loading" class="loading-screen">
+        <div class="spinner"></div>
+        <p>Đang tải...</p>
+      </div>
+
+      <!-- Hết hạn QR -->
+      <div id="screen-expired" class="expire-screen hidden">
+        <div class="icon">⏰</div>
+        <h2 style="color:#ef4444;font-size:20px;font-weight:700;margin-bottom:8px">QR Đã Hết Hạn</h2>
+        <p style="color:#6b7280;font-size:14px">Thời gian điểm danh đã kết thúc.<br>Vui lòng liên hệ admin.</p>
+      </div>
+
+      <!-- QR không hợp lệ -->
+      <div id="screen-invalid" class="error-screen hidden">
+        <div class="error-icon">❌</div>
+        <h2>QR Không Hợp Lệ</h2>
+        <p>Link điểm danh không đúng hoặc đã bị xóa.</p>
+      </div>
+
+      <!-- Đã điểm danh rồi -->
+      <div id="screen-already" class="success-screen hidden">
+        <div class="success-icon">✅</div>
+        <h2>Đã Điểm Danh</h2>
+        <p id="already-msg">Bạn đã điểm danh cho cuộc họp này rồi.</p>
+      </div>
+
+      <!-- Cần đăng nhập Google -->
+      <div id="screen-login" class="hidden">
+        <div class="logo">📋</div>
+        <h2 id="login-meeting-name"></h2>
+        <p class="subtitle">Cần đăng nhập Google để điểm danh</p>
+        <div class="login-required">
+          🔐 Email Google của bạn sẽ được dùng để xác minh danh tính. Không thể thay đổi.
+        </div>
+        <button id="btn-google-login" class="btn-google" style="width:100%">
+          <svg width="20" height="20" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+          Đăng nhập với Google
+        </button>
+      </div>
+
+      <!-- Form điểm danh -->
+      <div id="screen-form" class="hidden">
+        <div class="logo">📋</div>
+        <h2 id="form-meeting-name"></h2>
+        <p class="subtitle" id="form-meeting-time"></p>
+
+        <!-- Email display (khóa cứng) -->
+        <div class="email-display">
+          <span class="email-icon">🔐</span>
+          <div>
+            <div class="email-text">Email xác minh:</div>
+            <div class="email-addr" id="display-email"></div>
+            <div class="email-note">Email này được lấy từ tài khoản Google, không thể thay đổi</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:14px;margin-top:4px">
+          <!-- Họ tên -->
+          <div class="form-group">
+            <label>Họ và tên *</label>
+            <input type="text" id="input-name" placeholder="Nguyễn Văn A" class="form-control" autocomplete="name">
+          </div>
+
+          <!-- Chọn tổ -->
+          <div class="form-group">
+            <label>Tổ *</label>
+            <select id="input-group" class="form-control">
+              <option value="">-- Chọn tổ --</option>
+              <option value="to123">Tổ 1-2-3</option>
+              <option value="to45">Tổ 4-5</option>
+              <option value="tobomon">Tổ Bộ Môn</option>
+              <option value="tovanphong">Tổ Văn Phòng</option>
+            </select>
+          </div>
+
+          <!-- Checkbox vắng -->
+          <div class="checkbox-group">
+            <input type="checkbox" id="chk-absent" name="absent">
+            <label for="chk-absent">⚠️ Tôi vắng mặt (không tham dự cuộc họp)</label>
+          </div>
+
+          <!-- Lý do vắng (ẩn khi có mặt) -->
+          <div id="absent-reason-section" class="absent-section hidden">
+            <label>Lý do vắng *</label>
+            <div class="radio-group">
+              <label class="radio-option">
+                <input type="radio" name="absent-type" value="excused"> 📝 Có phép
+              </label>
+              <label class="radio-option">
+                <input type="radio" name="absent-type" value="unexcused"> 🚫 Không phép
+              </label>
+            </div>
+          </div>
+
+          <button id="btn-submit" class="btn-submit">✅ Điểm Danh</button>
+        </div>
+      </div>
+
+      <!-- Thành công -->
+      <div id="screen-success" class="success-screen hidden">
+        <div class="success-icon">✅</div>
+        <h2 id="success-title">Điểm Danh Thành Công!</h2>
+        <p id="success-msg"></p>
+        <div id="success-details" style="margin-top:16px;background:#f0fdf4;border-radius:10px;padding:16px;text-align:left;font-size:14px"></div>
+      </div>
+
+      <!-- Gian lận phát hiện -->
+      <div id="screen-fraud" class="error-screen hidden">
+        <div class="error-icon">⚠️</div>
+        <h2 style="color:#f59e0b">Phát Hiện Bất Thường</h2>
+        <p id="fraud-msg">Email đăng nhập không khớp với email đã đăng ký. Trường hợp này đã được ghi nhận.</p>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="firebase-init.js"></script>
+  <script src="attend.js"></script>
+</body>
+</html>
