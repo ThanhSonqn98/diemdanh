@@ -1,5 +1,5 @@
 // ============================================================
-// ADMIN.JS - Logic trang quản lý điểm danh
+// ADMIN.JS - Logi trang quản lý điểm danh
 // ============================================================
 
 // ---- Admin emails (có quyền truy cập admin) ----
