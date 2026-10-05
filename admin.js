@@ -5,6 +5,17 @@
 // ---- Admin emails (có quyền truy cập admin) ----
 const ADMIN_EMAILS = [
   'thanhsonqn98@gmail.com',   // Admin thường
+  'chauthu72@gmail.com',
+
+
+
+
+
+
+
+
+
+  
   'chaosonkhung@gmail.com'    // Super Admin - quyền tối cao
 ];
 
