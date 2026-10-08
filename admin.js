@@ -201,45 +201,598 @@ async function deleteMember(id) {
   showToast('Đã xóa thành viên');
 }
 
-// Import Excel
+// ============================================================
+// ---- QUẢN LÝ THÀNH VIÊN: IMPORT TIẾN TRÌNH & XOÁ TẤT CẢ ----
+// ============================================================
+
+let isImporting = false;
+let lastSkippedRecords = [];
+let lastImportStats = { fileName: '', total: 0, added: 0, skipped: 0 };
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function parseGroup(raw) {
+  if (!raw) return null;
+  const s = raw.toString().trim();
+  const lower = s.toLowerCase();
+
+  if (['bgh', 'to123', 'to45', 'tobomon', 'tovanphong'].includes(lower)) {
+    return lower;
+  }
+  if (lower.includes('bgh') || lower.includes('giám hiệu') || lower.includes('giam hieu')) {
+    return 'bgh';
+  }
+  if (lower.includes('1-2-3') || lower.includes('1 2 3') || lower.includes('1, 2, 3') || lower.includes('123') || lower.includes('tổ 1')) {
+    return 'to123';
+  }
+  if (lower.includes('4-5') || lower.includes('4 5') || lower.includes('4, 5') || lower.includes('45') || lower.includes('tổ 4')) {
+    return 'to45';
+  }
+  if (lower.includes('bộ môn') || lower.includes('bo mon') || lower.includes('bomon')) {
+    return 'tobomon';
+  }
+  if (lower.includes('văn phòng') || lower.includes('van phong') || lower.includes('vanphong')) {
+    return 'tovanphong';
+  }
+  return null;
+}
+
+function getRowValue(row, possibleKeys) {
+  if (!row) return '';
+  for (const k of possibleKeys) {
+    if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') {
+      return String(row[k]).trim();
+    }
+  }
+  const rowKeys = Object.keys(row);
+  for (const k of possibleKeys) {
+    const match = rowKeys.find(rk => rk.toLowerCase().trim() === k.toLowerCase().trim());
+    if (match && row[match] !== undefined && row[match] !== null && String(row[match]).trim() !== '') {
+      return String(row[match]).trim();
+    }
+  }
+  return '';
+}
+
+// Xóa tất cả thành viên
+document.getElementById('btn-delete-all-members')?.addEventListener('click', async () => {
+  if (!allMembers || allMembers.length === 0) {
+    showToast('Danh sách thành viên hiện đang trống!', 'info');
+    return;
+  }
+
+  const total = allMembers.length;
+  const confirm1 = confirm(
+    `⚠️ CẢNH BÁO QUAN TRỌNG!\n\nBạn có chắc chắn muốn xóa TOÀN BỘ ${total} thành viên khỏi hệ thống?\n\n- Toàn bộ danh sách thành viên sẽ bị xóa vĩnh viễn.\n- Thao tác này KHÔNG THỂ khôi phục!`
+  );
+  if (!confirm1) return;
+
+  const confirm2 = confirm(`Xác nhận lần cuối: Bấm OK để bắt đầu xóa toàn bộ ${total} thành viên!`);
+  if (!confirm2) return;
+
+  const btn = document.getElementById('btn-delete-all-members');
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Đang xóa...';
+
+  try {
+    const snap = await db.collection('members').get();
+    const docs = snap.docs;
+    const deleteCount = docs.length;
+
+    // Chia thành các batch tối đa 400 docs
+    for (let i = 0; i < docs.length; i += 400) {
+      const batch = db.batch();
+      const chunk = docs.slice(i, i + 400);
+      chunk.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+
+    await loadMembers();
+    renderMembersTable();
+    if (currentMeetingId) {
+      await loadAttendances();
+    }
+    renderDashboard();
+
+    // Ẩn banner thông báo bỏ qua nếu có
+    document.getElementById('import-skipped-banner')?.classList.add('hidden');
+    lastSkippedRecords = [];
+
+    showToast(`🗑️ Đã xóa thành công toàn bộ ${deleteCount} thành viên!`);
+  } catch (err) {
+    showToast('Lỗi khi xóa thành viên: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🗑️ Xóa tất cả';
+  }
+});
+
+// Import Excel với thanh tiến trình & phát hiện bản ghi bị bỏ qua
 document.getElementById('import-excel').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
+
+  const importModal = document.getElementById('import-modal-overlay');
+  const importTitle = document.getElementById('import-modal-title');
+  const importBody = document.getElementById('import-modal-body');
+
+  importTitle.textContent = `📥 Import Excel - ${file.name}`;
+  importModal.classList.remove('hidden');
+
+  // Giao diện khởi tạo tiến trình
+  importBody.innerHTML = `
+    <div class="import-progress-container">
+      <div class="import-progress-header">
+        <span style="font-weight:600;font-size:14px;color:var(--gray-700)">📄 ${escapeHtml(file.name)}</span>
+        <span id="import-pct-text" class="import-progress-pct">0%</span>
+      </div>
+      <div class="import-progress-track">
+        <div id="import-progress-fill" class="import-progress-fill" style="width: 0%"></div>
+      </div>
+      <div id="import-status-text" style="font-size:13px;color:var(--gray-600);margin-top:8px">Đang đọc dữ liệu từ file...</div>
+      <div class="import-stats-row">
+        <div class="import-stat-box">
+          <div class="num" id="stat-import-total">0</div>
+          <div class="lbl">Tổng dòng hợp lệ</div>
+        </div>
+        <div class="import-stat-box">
+          <div class="num" id="stat-import-added" style="color:var(--success)">0</div>
+          <div class="lbl">Thêm thành công</div>
+        </div>
+        <div class="import-stat-box">
+          <div class="num" id="stat-import-skipped" style="color:var(--danger)">0</div>
+          <div class="lbl">Bị bỏ qua</div>
+        </div>
+      </div>
+    </div>
+    <div id="import-stage-details" style="font-size:13px;color:var(--gray-500);text-align:center;padding:12px">
+      Vui lòng không tắt trình duyệt trong quá trình nhập dữ liệu.
+    </div>
+  `;
+
+  isImporting = true;
+
   const reader = new FileReader();
   reader.onload = async (ev) => {
     try {
-      const wb = XLSX.read(ev.target.result, { type: 'binary' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws);
-      let added = 0, skipped = 0;
-      for (const row of rows) {
-        const name = (row['Họ tên'] || row['name'] || '').trim();
-        const email = (row['Email'] || row['email'] || '').trim().toLowerCase();
-        const group = (row['Tổ'] || row['group'] || '').trim();
-        const role = (row['Chức vụ'] || row['role'] || '').trim();
-        if (!name || !email || !group) { skipped++; continue; }
-        const existing = allMembers.find(m => m.email === email);
-        if (existing) { skipped++; continue; }
-        const groupMap = {
-          'BGH': 'bgh', 'Ban Giám Hiệu': 'bgh', 'Ban giám hiệu': 'bgh',
-          'Tổ 1-2-3': 'to123', 'Tổ 4-5': 'to45', 'Tổ Bộ Môn': 'tobomon', 'Tổ Văn Phòng': 'tovanphong'
-        };
-        const groupKey = groupMap[group] || group;
-        await db.collection('members').add({ name, email, group: groupKey, role, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-        added++;
+      const data = ev.target.result;
+      const wb = XLSX.read(data, { type: 'binary' });
+      const firstSheetName = wb.SheetNames[0];
+      const ws = wb.Sheets[firstSheetName];
+      const rawRows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      if (!rawRows || rawRows.length === 0) {
+        isImporting = false;
+        importBody.innerHTML = `
+          <div class="import-result-alert warning">
+            <span style="font-size:24px">⚠️</span>
+            <div>
+              <strong>File rỗng!</strong>
+              <p>Không tìm thấy dữ liệu dòng nào trong file Excel được chọn.</p>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end">
+            <button class="btn-primary" onclick="closeImportModal()">Đóng</button>
+          </div>
+        `;
+        return;
       }
-      showToast(`Import xong: +${added} mới, bỏ qua ${skipped}`);
+
+      // Quét & phân loại dữ liệu
+      const validMembers = [];
+      const skippedRecords = [];
+      const seenEmailsInFile = new Set();
+      const existingEmailsInDb = new Set(allMembers.map(m => (m.email || '').toLowerCase().trim()));
+
+      rawRows.forEach((row, idx) => {
+        const rowNum = idx + 2; // Dòng 1 là tiêu đề cột
+
+        const name = getRowValue(row, ['Họ tên', 'Họ và tên', 'Họ Tên', 'name', 'Name', 'FullName', 'Tên']);
+        const rawEmail = getRowValue(row, ['Email', 'email', 'E-mail', 'Mail', 'Địa chỉ email']);
+        const rawGroup = getRowValue(row, ['Tổ', 'tổ', 'group', 'Group', 'Tổ chuyên môn', 'Đơn vị']);
+        const role = getRowValue(row, ['Chức vụ', 'chức vụ', 'role', 'Role', 'Vị trí']);
+
+        // Bỏ qua nếu là dòng hoàn toàn trống
+        if (!name && !rawEmail && !rawGroup && !role) {
+          return;
+        }
+
+        const errors = [];
+        if (!name) {
+          errors.push('Thiếu họ và tên');
+        }
+
+        const email = rawEmail.toLowerCase().trim();
+        if (!email) {
+          errors.push('Thiếu địa chỉ email');
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          errors.push(`Email không đúng định dạng (${rawEmail})`);
+        } else if (existingEmailsInDb.has(email)) {
+          errors.push('Email đã tồn tại trong hệ thống');
+        } else if (seenEmailsInFile.has(email)) {
+          errors.push('Email trùng lặp với dòng khác trong file');
+        }
+
+        const groupKey = parseGroup(rawGroup);
+        if (!rawGroup) {
+          errors.push('Thiếu thông tin tổ');
+        } else if (!groupKey) {
+          errors.push(`Tổ không hợp lệ (${rawGroup})`);
+        }
+
+        if (errors.length > 0) {
+          skippedRecords.push({
+            rowNum,
+            name: name || '--',
+            email: rawEmail || '--',
+            group: rawGroup || '--',
+            role: role || '--',
+            reason: errors.join('; ')
+          });
+        } else {
+          seenEmailsInFile.add(email);
+          validMembers.push({
+            rowNum,
+            name,
+            email,
+            group: groupKey,
+            role
+          });
+        }
+      });
+
+      const totalRowsToProcess = validMembers.length + skippedRecords.length;
+
+      if (totalRowsToProcess === 0) {
+        isImporting = false;
+        importBody.innerHTML = `
+          <div class="import-result-alert warning">
+            <span style="font-size:24px">⚠️</span>
+            <div>
+              <strong>Không tìm thấy dữ liệu!</strong>
+              <p>Tất cả các dòng trong file đều trống hoặc không có thông tin để xử lý.</p>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end">
+            <button class="btn-primary" onclick="closeImportModal()">Đóng</button>
+          </div>
+        `;
+        return;
+      }
+
+      const progressFill = document.getElementById('import-progress-fill');
+      const pctText = document.getElementById('import-pct-text');
+      const statusText = document.getElementById('import-status-text');
+      const statTotal = document.getElementById('stat-import-total');
+      const statAdded = document.getElementById('stat-import-added');
+      const statSkipped = document.getElementById('stat-import-skipped');
+
+      if (statTotal) statTotal.textContent = totalRowsToProcess;
+      if (statSkipped) statSkipped.textContent = skippedRecords.length;
+
+      // Upload valid members theo từng chunk batch (mỗi chunk 20 người để thanh tiến trình chạy mượt)
+      const chunkSize = 20;
+      let addedCount = 0;
+
+      for (let i = 0; i < validMembers.length; i += chunkSize) {
+        const chunk = validMembers.slice(i, i + chunkSize);
+        const batch = db.batch();
+
+        chunk.forEach(m => {
+          const docRef = db.collection('members').doc();
+          batch.set(docRef, {
+            name: m.name,
+            email: m.email,
+            group: m.group,
+            role: m.role || '',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        });
+
+        await batch.commit();
+        addedCount += chunk.length;
+
+        // Cập nhật tiến độ
+        const currentProcessed = addedCount + skippedRecords.length;
+        const currentPercent = totalRowsToProcess > 0
+          ? Math.min(100, Math.round((currentProcessed / totalRowsToProcess) * 100))
+          : 100;
+
+        if (progressFill) progressFill.style.width = currentPercent + '%';
+        if (pctText) pctText.textContent = currentPercent + '%';
+        if (statAdded) statAdded.textContent = addedCount;
+        if (statusText) statusText.textContent = `Đang lưu vào cơ sở dữ liệu: ${addedCount} / ${validMembers.length} thành viên...`;
+
+        await new Promise(r => setTimeout(r, 40));
+      }
+
+      // Hoàn tất 100%
+      if (progressFill) progressFill.style.width = '100%';
+      if (pctText) pctText.textContent = '100%';
+
+      // Tải lại dữ liệu hệ thống
       await loadMembers();
       renderMembersTable();
+      if (currentMeetingId) {
+        await loadAttendances();
+      }
+      renderDashboard();
+
+      isImporting = false;
+      lastSkippedRecords = skippedRecords;
+      lastImportStats = {
+        fileName: file.name,
+        total: totalRowsToProcess,
+        added: addedCount,
+        skipped: skippedRecords.length
+      };
+
+      // Cập nhật thông báo ngoài giao diện chính
+      updateSkippedBanner(skippedRecords);
+
+      // Hiển thị màn hình kết quả chi tiết
+      renderImportResultModal(lastImportStats, skippedRecords);
+
+      if (skippedRecords.length > 0) {
+        showToast(`⚠️ Import: +${addedCount} thành công, ${skippedRecords.length} bị bỏ qua!`, 'warning');
+      } else {
+        showToast(`✅ Đã import thành công ${addedCount} thành viên!`);
+      }
+
     } catch (err) {
-      showToast('Lỗi đọc file: ' + err.message, 'error');
+      isImporting = false;
+      console.error('Lỗi import file:', err);
+      showToast('Lỗi khi import file: ' + err.message, 'error');
+      importBody.innerHTML = `
+        <div class="import-result-alert warning">
+          <span style="font-size:24px">❌</span>
+          <div>
+            <strong>Đã xảy ra lỗi trong quá trình xử lý:</strong>
+            <p>${escapeHtml(err.message)}</p>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end">
+          <button class="btn-primary" onclick="closeImportModal()">Đóng</button>
+        </div>
+      `;
     }
   };
+
   reader.readAsBinaryString(file);
   e.target.value = '';
 });
 
-// Export template Excel
+// Render màn hình kết quả import chi tiết trong Modal
+function renderImportResultModal(stats, skippedRecords) {
+  const importBody = document.getElementById('import-modal-body');
+  if (!importBody) return;
+
+  const hasSkipped = skippedRecords && skippedRecords.length > 0;
+
+  let bannerHtml = '';
+  if (!hasSkipped) {
+    bannerHtml = `
+      <div class="import-result-alert success">
+        <span style="font-size:26px">🎉</span>
+        <div>
+          <strong style="font-size:15px">Tuyệt vời! Toàn bộ dữ liệu đã được import thành công.</strong>
+          <p style="margin-top:3px">Đã thêm mới đầy đủ ${stats.added} thành viên vào danh sách. Không có dòng nào bị lỗi hoặc bỏ qua.</p>
+        </div>
+      </div>
+    `;
+  } else {
+    bannerHtml = `
+      <div class="import-result-alert warning">
+        <span style="font-size:26px">⚠️</span>
+        <div>
+          <strong style="font-size:15px">Thông báo: Có ${skippedRecords.length} dòng bị bỏ qua không thể import!</strong>
+          <p style="margin-top:3px">Các dòng dưới đây không được import do thiếu thông tin (họ tên, email, tổ), sai định dạng email hoặc email đã tồn tại. Bạn có thể xem danh sách, tìm kiếm và tải về file Excel để bổ sung thông tin.</p>
+        </div>
+      </div>
+    `;
+  }
+
+  let skippedSectionHtml = '';
+  if (hasSkipped) {
+    skippedSectionHtml = `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin:18px 0 10px;flex-wrap:wrap">
+        <div style="position:relative;flex:1;min-width:240px">
+          <input type="text" id="search-skipped-input" placeholder="🔍 Tìm kiếm họ tên, email, lý do..." class="form-control" style="width:100%;padding-left:36px">
+          <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#9ca3af;pointer-events:none">🔍</span>
+        </div>
+        <button id="btn-export-skipped-excel" class="btn-secondary" style="font-weight:600;color:var(--primary);border-color:var(--primary-light)">
+          📥 Tải danh sách bỏ qua (.xlsx)
+        </button>
+      </div>
+
+      <div class="skipped-table-wrap">
+        <table class="data-table" style="font-size:13px">
+          <thead>
+            <tr>
+              <th style="width:40px;text-align:center">#</th>
+              <th style="width:65px;text-align:center">Dòng</th>
+              <th>Họ tên</th>
+              <th>Email</th>
+              <th>Tổ</th>
+              <th>Chức vụ</th>
+              <th>Lý do bỏ qua</th>
+            </tr>
+          </thead>
+          <tbody id="skipped-tbody"></tbody>
+        </table>
+      </div>
+      <p style="font-size:12px;color:var(--gray-500);margin-top:8px">
+        💡 Gợi ý: Bấm <strong>"Tải danh sách bỏ qua (.xlsx)"</strong> để lấy file đã ghi chú rõ từng lỗi, sửa lại thông tin và import lại.
+      </p>
+    `;
+  }
+
+  importBody.innerHTML = `
+    <div class="import-progress-container" style="margin-bottom:16px">
+      <div class="import-progress-header">
+        <span style="font-weight:600;font-size:14px;color:var(--gray-700)">📄 ${escapeHtml(stats.fileName)}</span>
+        <span class="import-progress-pct" style="color:var(--success)">100% Hoàn tất</span>
+      </div>
+      <div class="import-progress-track">
+        <div class="import-progress-fill" style="width: 100%; background: #10b981;"></div>
+      </div>
+      <div class="import-stats-row">
+        <div class="import-stat-box">
+          <div class="num">${stats.total}</div>
+          <div class="lbl">Tổng dòng xử lý</div>
+        </div>
+        <div class="import-stat-box">
+          <div class="num" style="color:var(--success)">+${stats.added}</div>
+          <div class="lbl">Đã thêm mới</div>
+        </div>
+        <div class="import-stat-box">
+          <div class="num" style="color:${hasSkipped ? 'var(--danger)' : 'var(--gray-500)'}">${stats.skipped}</div>
+          <div class="lbl">Bị bỏ qua</div>
+        </div>
+      </div>
+    </div>
+
+    ${bannerHtml}
+    ${skippedSectionHtml}
+
+    <div style="display:flex;justify-content:flex-end;margin-top:20px;gap:10px">
+      <button class="btn-primary" onclick="closeImportModal()">${hasSkipped ? 'Đóng' : 'Hoàn tất'}</button>
+    </div>
+  `;
+
+  if (hasSkipped) {
+    renderSkippedRows(skippedRecords);
+
+    // Tìm kiếm trong danh sách bỏ qua
+    const searchInput = document.getElementById('search-skipped-input');
+    searchInput?.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      const filtered = skippedRecords.filter(r =>
+        (r.name || '').toLowerCase().includes(q) ||
+        (r.email || '').toLowerCase().includes(q) ||
+        (r.group || '').toLowerCase().includes(q) ||
+        (r.role || '').toLowerCase().includes(q) ||
+        (r.reason || '').toLowerCase().includes(q) ||
+        String(r.rowNum).includes(q)
+      );
+      renderSkippedRows(filtered);
+    });
+
+    // Nút tải danh sách bỏ qua ra file Excel
+    document.getElementById('btn-export-skipped-excel')?.addEventListener('click', () => {
+      exportSkippedToExcel(skippedRecords);
+    });
+  }
+}
+
+function renderSkippedRows(records) {
+  const tbody = document.getElementById('skipped-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (!records || records.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:24px">Không có dòng nào khớp với tìm kiếm</td></tr>';
+    return;
+  }
+
+  records.forEach((r, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="text-align:center;color:#6b7280">${idx + 1}</td>
+      <td style="text-align:center;font-weight:600;color:var(--gray-700)">Dòng ${r.rowNum}</td>
+      <td style="font-weight:500">${escapeHtml(r.name)}</td>
+      <td style="font-family:monospace;font-size:12px;color:var(--gray-700)">${escapeHtml(r.email)}</td>
+      <td>${escapeHtml(r.group)}</td>
+      <td>${escapeHtml(r.role)}</td>
+      <td><span class="badge-reason">${escapeHtml(r.reason)}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function exportSkippedToExcel(records) {
+  if (!records || !records.length) {
+    showToast('Không có bản ghi bị bỏ qua để xuất', 'info');
+    return;
+  }
+
+  const rows = records.map((r, i) => ({
+    'STT': i + 1,
+    'Dòng trong file gốc': r.rowNum,
+    'Họ tên': r.name,
+    'Email': r.email,
+    'Tổ': r.group,
+    'Chức vụ': r.role,
+    'Lý do bỏ qua': r.reason
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Thành viên bị bỏ qua');
+  const dateStr = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `thanh_vien_bo_qua_${dateStr}.xlsx`);
+  showToast('Đã tải danh sách thành viên bị bỏ qua về máy!');
+}
+
+function updateSkippedBanner(skippedRecords) {
+  const banner = document.getElementById('import-skipped-banner');
+  const bannerText = document.getElementById('import-skipped-banner-text');
+  if (!banner) return;
+
+  if (skippedRecords && skippedRecords.length > 0) {
+    banner.classList.remove('hidden');
+    if (bannerText) {
+      bannerText.textContent = `Đợt import vừa qua có ${skippedRecords.length} dòng bị bỏ qua không được nhập vào hệ thống.`;
+    }
+  } else {
+    banner.classList.add('hidden');
+  }
+}
+
+// Mở lại danh sách bỏ qua từ banner ngoài trang
+document.getElementById('btn-reopen-skipped')?.addEventListener('click', () => {
+  if (!lastSkippedRecords || !lastSkippedRecords.length) {
+    showToast('Không có dữ liệu bị bỏ qua từ lần import gần nhất', 'info');
+    return;
+  }
+  const importModal = document.getElementById('import-modal-overlay');
+  const importTitle = document.getElementById('import-modal-title');
+  importTitle.textContent = `📋 Danh sách thành viên bị bỏ qua (${lastImportStats.fileName || 'Import Excel'})`;
+  importModal.classList.remove('hidden');
+  renderImportResultModal(lastImportStats, lastSkippedRecords);
+});
+
+// Đóng banner ngoài trang
+document.getElementById('btn-close-skipped-banner')?.addEventListener('click', () => {
+  document.getElementById('import-skipped-banner')?.classList.add('hidden');
+});
+
+// Đóng modal import
+function closeImportModal() {
+  if (isImporting) {
+    showToast('Đang trong quá trình nhập dữ liệu, vui lòng đợi hoàn tất!', 'warning');
+    return;
+  }
+  document.getElementById('import-modal-overlay')?.classList.add('hidden');
+}
+window.closeImportModal = closeImportModal;
+
+document.getElementById('import-modal-close')?.addEventListener('click', closeImportModal);
+document.getElementById('import-modal-overlay')?.addEventListener('click', (e) => {
+  if (e.target === document.getElementById('import-modal-overlay')) {
+    closeImportModal();
+  }
+});
+
+// Export template Excel (kèm đầy đủ các tổ mẫu để người dùng dễ nhập)
 document.getElementById('btn-export-template').addEventListener('click', () => {
   const ws = XLSX.utils.aoa_to_sheet([[
     'Họ tên', 'Email', 'Tổ', 'Chức vụ'
@@ -249,11 +802,16 @@ document.getElementById('btn-export-template').addEventListener('click', () => {
     'Trần Thị B', 'tran.b@gmail.com', 'Tổ 1-2-3', 'Giáo viên'
   ], [
     'Lê Văn C', 'le.c@gmail.com', 'Tổ 4-5', 'Giáo viên'
+  ], [
+    'Phạm Thị D', 'pham.d@gmail.com', 'Tổ Bộ Môn', 'Giáo viên Tiếng Anh'
+  ], [
+    'Hoàng Văn E', 'hoang.e@gmail.com', 'Tổ Văn Phòng', 'Kế toán'
   ]]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Danh sách');
   XLSX.writeFile(wb, 'mau_danh_sach_giao_vien.xlsx');
 });
+
 
 // ---- MEETINGS ----
 async function loadMeetings() {

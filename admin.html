@@ -259,6 +259,7 @@
               <input type="file" id="import-excel" accept=".xlsx,.xls" hidden>
             </label>
             <button id="btn-export-template" class="btn-secondary">📄 Tải mẫu Excel</button>
+            <button id="btn-delete-all-members" class="btn-danger" style="display:inline-flex;align-items:center;gap:6px">🗑️ Xóa tất cả</button>
           </div>
         </div>
 
@@ -297,6 +298,21 @@
               <button id="btn-save-member" class="btn-primary">💾 Lưu</button>
               <button id="btn-cancel-member" class="btn-secondary">Hủy</button>
             </div>
+          </div>
+        </div>
+
+        <!-- Banner thông báo thành viên bị bỏ qua từ đợt import gần nhất -->
+        <div id="import-skipped-banner" class="hidden" style="background:#fffbeb;border:1px solid #fcd34d;border-radius:var(--radius-sm);padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:24px">⚠️</span>
+            <div>
+              <strong id="import-skipped-banner-text" style="color:#92400e;font-size:14px">Có thành viên bị bỏ qua trong lần import gần nhất.</strong>
+              <p style="color:#b45309;font-size:12px;margin-top:2px">Bấm "Xem danh sách" để tra cứu những người chưa được thêm và bổ sung thông tin.</p>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="btn-reopen-skipped" class="btn-primary" style="padding:7px 14px;font-size:13px;background:#f59e0b">📋 Xem danh sách bỏ qua</button>
+            <button id="btn-close-skipped-banner" class="btn-secondary" style="padding:7px 12px;font-size:13px">✕ Đóng</button>
           </div>
         </div>
 
@@ -440,7 +456,18 @@
     </div>
   </div>
 
-  <script src="firebase-init.js?v=2.3"></script>
-  <script src="admin.js?v=2.3"></script>
+  <!-- Modal Tiến trình & Kết quả Import Excel -->
+  <div id="import-modal-overlay" class="modal-overlay hidden">
+    <div class="modal import-modal">
+      <div class="modal-header">
+        <h3 id="import-modal-title">📥 Tiến trình Import Excel</h3>
+        <button id="import-modal-close" class="modal-close" title="Đóng">✕</button>
+      </div>
+      <div class="modal-body" id="import-modal-body"></div>
+    </div>
+  </div>
+
+  <script src="firebase-init.js?v=2.4"></script>
+  <script src="admin.js?v=2.4"></script>
 </body>
 </html>
