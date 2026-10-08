@@ -21,16 +21,9 @@ const db = firebase.firestore();
 const auth = firebase.auth();
 const provider = new firebase.auth.GoogleAuthProvider();
 
-// Danh sách tổ mặc định (dùng khi khởi tạo hoặc dự phòng)
-const DEFAULT_GROUPS = [
-  { id: 'to123', name: 'Tổ 1-2-3', icon: '🏢', order: 1 },
-  { id: 'to45', name: 'Tổ 4-5', icon: '🏢', order: 2 },
-  { id: 'tobomon', name: 'Tổ Bộ Môn', icon: '📚', order: 3 },
-  { id: 'tovanphong', name: 'Tổ Văn Phòng', icon: '🏛️', order: 4 }
-];
-
-// Hàm tiện ích chung (tự động cập nhật thêm khi tải dữ liệu từ Firestore)
+// Hàm tiện ích chung
 const GROUP_NAMES = {
+  bgh: 'BGH',
   to123: 'Tổ 1-2-3',
   to45: 'Tổ 4-5',
   tobomon: 'Tổ Bộ Môn',

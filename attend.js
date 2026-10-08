@@ -10,52 +10,6 @@ const token = urlParams.get('t');
 let meetingData = null;
 let userEmail = null;
 let userName = null;
-let allGroups = [];
-
-// ---- Tải danh sách tổ bộ môn ----
-async function loadGroups() {
-  try {
-    const snap = await db.collection('groups').get();
-    if (!snap.empty) {
-      allGroups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      allGroups.sort((a, b) => (a.order || 0) - (b.order || 0));
-    } else {
-      allGroups = (typeof DEFAULT_GROUPS !== 'undefined' ? DEFAULT_GROUPS : [
-        { id: 'to123', name: 'Tổ 1-2-3', icon: '🏢' },
-        { id: 'to45', name: 'Tổ 4-5', icon: '🏢' },
-        { id: 'tobomon', name: 'Tổ Bộ Môn', icon: '📚' },
-        { id: 'tovanphong', name: 'Tổ Văn Phòng', icon: '🏛️' }
-      ]);
-    }
-  } catch (e) {
-    console.warn('Lỗi tải danh sách tổ:', e);
-    allGroups = (typeof DEFAULT_GROUPS !== 'undefined' ? DEFAULT_GROUPS : [
-      { id: 'to123', name: 'Tổ 1-2-3', icon: '🏢' },
-      { id: 'to45', name: 'Tổ 4-5', icon: '🏢' },
-      { id: 'tobomon', name: 'Tổ Bộ Môn', icon: '📚' },
-      { id: 'tovanphong', name: 'Tổ Văn Phòng', icon: '🏛️' }
-    ]);
-  }
-
-  // Cập nhật từ điển GROUP_NAMES
-  allGroups.forEach(g => {
-    GROUP_NAMES[g.id] = g.name;
-  });
-
-  // Hiển thị ra dropdown tổ
-  const groupSelect = document.getElementById('input-group');
-  if (groupSelect) {
-    const curVal = groupSelect.value;
-    groupSelect.innerHTML = '<option value="">-- Chọn tổ --</option>';
-    allGroups.forEach(g => {
-      const opt = document.createElement('option');
-      opt.value = g.id;
-      opt.textContent = `${g.icon ? g.icon + ' ' : ''}${g.name}`;
-      groupSelect.appendChild(opt);
-    });
-    if (curVal) groupSelect.value = curVal;
-  }
-}
 
 // ---- Hiển thị màn hình ----
 function showScreen(screenId) {
@@ -72,7 +26,6 @@ function showScreen(screenId) {
 // ---- Validate QR & Load meeting ----
 async function initPage() {
   showScreen('screen-loading');
-  await loadGroups();
 
   if (!meetingId || !token) {
     showScreen('screen-invalid');
@@ -160,18 +113,6 @@ async function onUserLoggedIn() {
   // Pre-fill tên nếu có
   if (userName) {
     document.getElementById('input-name').value = userName;
-  }
-
-  // Pre-fill thông tin đã đăng ký trong hệ thống
-  try {
-    const memberSnap = await db.collection('members').where('email', '==', userEmail).get();
-    if (!memberSnap.empty) {
-      const reg = memberSnap.docs[0].data();
-      if (reg.name) document.getElementById('input-name').value = reg.name;
-      if (reg.group) document.getElementById('input-group').value = reg.group;
-    }
-  } catch (err) {
-    console.warn('Lỗi kiểm tra thông tin thành viên:', err);
   }
 
   showScreen('screen-form');
@@ -280,8 +221,8 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
         `Lưu ý: ${fraudType}. Trường hợp này đã được ghi nhận và thông báo đến admin.`;
       showScreen('screen-fraud');
     } else {
+      const groupNames = { bgh: 'BGH', to123: 'Tổ 1-2-3', to45: 'Tổ 4-5', tobomon: 'Tổ Bộ Môn', tovanphong: 'Tổ Văn Phòng' };
       let statusText = status === 'present' ? '✅ Có mặt' : status === 'excused' ? '📝 Vắng có phép' : '🚫 Vắng không phép';
-      const groupDisplayName = GROUP_NAMES[group] || group;
       document.getElementById('success-title').textContent =
         status === 'present' ? 'Điểm Danh Thành Công!' : 'Đã Ghi Nhận Vắng Mặt';
       document.getElementById('success-msg').textContent =
@@ -289,7 +230,7 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
       document.getElementById('success-details').innerHTML = `
         <div style="display:flex;flex-direction:column;gap:8px">
           <div>👤 <strong>Họ tên:</strong> ${name}</div>
-          <div>🏢 <strong>Tổ:</strong> ${groupDisplayName}</div>
+          <div>🏢 <strong>Tổ:</strong> ${groupNames[group] || group}</div>
           <div>📊 <strong>Trạng thái:</strong> ${statusText}</div>
           <div>📧 <strong>Email:</strong> ${userEmail}</div>
           <div>🕐 <strong>Thời gian:</strong> ${new Date().toLocaleString('vi-VN')}</div>

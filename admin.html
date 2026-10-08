@@ -31,7 +31,6 @@
         <button class="nav-tab active" data-tab="dashboard">📊 Dashboard</button>
         <button class="nav-tab" data-tab="create-qr">🔳 Tạo QR</button>
         <button class="nav-tab" data-tab="members">👥 Thành viên</button>
-        <button class="nav-tab" data-tab="groups">🏢 Quản lý Tổ</button>
         <button class="nav-tab" data-tab="summary">📈 Tổng kết</button>
         <button class="nav-tab" data-tab="fraud">⚠️ Gian lận</button>
       </div>
@@ -100,8 +99,59 @@
           </div>
         </div>
 
-        <!-- Bảng theo tổ (hiển thị động theo các tổ trong hệ thống) -->
-        <div class="groups-grid" id="groups-grid"></div>
+        <!-- Bảng theo tổ -->
+        <div class="groups-grid">
+          <div class="group-card" data-group="bgh">
+            <div class="group-header">⭐ BGH</div>
+            <div class="group-stats">
+              <div class="gs-item"><span>Tổng:</span> <strong id="g-bgh-total">0</strong></div>
+              <div class="gs-item present"><span>Có mặt:</span> <strong id="g-bgh-present">0</strong></div>
+              <div class="gs-item absent"><span>Vắng có phép:</span> <strong id="g-bgh-excused">0</strong></div>
+              <div class="gs-item unexcused"><span>Vắng K.phép:</span> <strong id="g-bgh-unexcused">0</strong></div>
+            </div>
+            <button class="btn-view-detail" data-group="bgh">Xem chi tiết</button>
+          </div>
+          <div class="group-card" data-group="to123">
+            <div class="group-header">🏢 Tổ 1-2-3</div>
+            <div class="group-stats">
+              <div class="gs-item"><span>Tổng:</span> <strong id="g-to123-total">0</strong></div>
+              <div class="gs-item present"><span>Có mặt:</span> <strong id="g-to123-present">0</strong></div>
+              <div class="gs-item absent"><span>Vắng có phép:</span> <strong id="g-to123-excused">0</strong></div>
+              <div class="gs-item unexcused"><span>Vắng K.phép:</span> <strong id="g-to123-unexcused">0</strong></div>
+            </div>
+            <button class="btn-view-detail" data-group="to123">Xem chi tiết</button>
+          </div>
+          <div class="group-card" data-group="to45">
+            <div class="group-header">🏢 Tổ 4-5</div>
+            <div class="group-stats">
+              <div class="gs-item"><span>Tổng:</span> <strong id="g-to45-total">0</strong></div>
+              <div class="gs-item present"><span>Có mặt:</span> <strong id="g-to45-present">0</strong></div>
+              <div class="gs-item absent"><span>Vắng có phép:</span> <strong id="g-to45-excused">0</strong></div>
+              <div class="gs-item unexcused"><span>Vắng K.phép:</span> <strong id="g-to45-unexcused">0</strong></div>
+            </div>
+            <button class="btn-view-detail" data-group="to45">Xem chi tiết</button>
+          </div>
+          <div class="group-card" data-group="tobomon">
+            <div class="group-header">📚 Tổ Bộ Môn</div>
+            <div class="group-stats">
+              <div class="gs-item"><span>Tổng:</span> <strong id="g-tobomon-total">0</strong></div>
+              <div class="gs-item present"><span>Có mặt:</span> <strong id="g-tobomon-present">0</strong></div>
+              <div class="gs-item absent"><span>Vắng có phép:</span> <strong id="g-tobomon-excused">0</strong></div>
+              <div class="gs-item unexcused"><span>Vắng K.phép:</span> <strong id="g-tobomon-unexcused">0</strong></div>
+            </div>
+            <button class="btn-view-detail" data-group="tobomon">Xem chi tiết</button>
+          </div>
+          <div class="group-card" data-group="tovanphong">
+            <div class="group-header">🏛️ Tổ Văn Phòng</div>
+            <div class="group-stats">
+              <div class="gs-item"><span>Tổng:</span> <strong id="g-tovanphong-total">0</strong></div>
+              <div class="gs-item present"><span>Có mặt:</span> <strong id="g-tovanphong-present">0</strong></div>
+              <div class="gs-item absent"><span>Vắng có phép:</span> <strong id="g-tovanphong-excused">0</strong></div>
+              <div class="gs-item unexcused"><span>Vắng K.phép:</span> <strong id="g-tovanphong-unexcused">0</strong></div>
+            </div>
+            <button class="btn-view-detail" data-group="tovanphong">Xem chi tiết</button>
+          </div>
+        </div>
 
         <!-- Chi tiết điểm danh -->
         <div class="detail-section">
@@ -202,7 +252,6 @@
           <h1>👥 Quản lý Thành viên</h1>
           <div class="header-controls">
             <button id="btn-add-member" class="btn-primary">➕ Thêm thành viên</button>
-            <button id="btn-quick-groups" class="btn-secondary">🏢 Quản lý Tổ</button>
             <label class="btn-secondary" style="cursor:pointer">
               📥 Import Excel
               <input type="file" id="import-excel" accept=".xlsx,.xls" hidden>
@@ -230,6 +279,11 @@
                 <label>Tổ *</label>
                 <select id="member-group" class="form-control">
                   <option value="">-- Chọn tổ --</option>
+                  <option value="bgh">BGH</option>
+                  <option value="to123">Tổ 1-2-3</option>
+                  <option value="to45">Tổ 4-5</option>
+                  <option value="tobomon">Tổ Bộ Môn</option>
+                  <option value="tovanphong">Tổ Văn Phòng</option>
                 </select>
               </div>
               <div class="form-group">
@@ -257,84 +311,6 @@
               </tr>
             </thead>
             <tbody id="members-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB QUẢN LÝ TỔ -->
-    <div id="tab-groups" class="tab-content">
-      <div class="container">
-        <div class="page-header">
-          <div>
-            <h1>🏢 Quản lý Tổ bộ môn</h1>
-            <p style="color:var(--gray-500);font-size:14px;margin-top:4px">
-              Thêm, chỉnh sửa và quản lý các tổ bộ môn. Tổ mới sẽ tự động hiển thị trên Dashboard, form điểm danh QR và quản lý thành viên.
-            </p>
-          </div>
-          <div class="header-controls">
-            <button id="btn-add-group" class="btn-primary">➕ Thêm tổ mới</button>
-          </div>
-        </div>
-
-        <!-- Form thêm/sửa tổ -->
-        <div id="group-form-section" class="form-section hidden">
-          <h3 id="group-form-title">Thêm tổ bộ môn mới</h3>
-          <div class="member-form">
-            <div class="form-row">
-              <div class="form-group">
-                <label>Tên tổ bộ môn *</label>
-                <input type="text" id="group-name-input" placeholder="VD: Tổ Tiếng Anh, Tổ KHTN..." class="form-control">
-              </div>
-              <div class="form-group">
-                <label>Biểu tượng (Icon)</label>
-                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                  <input type="text" id="group-icon-input" value="🏢" class="form-control" style="width:60px;text-align:center;font-size:18px" maxlength="4">
-                  <div class="icon-presets" style="display:flex;gap:6px;flex-wrap:wrap">
-                    <button type="button" class="btn-icon-preset" data-icon="🏢">🏢</button>
-                    <button type="button" class="btn-icon-preset" data-icon="📚">📚</button>
-                    <button type="button" class="btn-icon-preset" data-icon="🏛️">🏛️</button>
-                    <button type="button" class="btn-icon-preset" data-icon="🔬">🔬</button>
-                    <button type="button" class="btn-icon-preset" data-icon="💻">💻</button>
-                    <button type="button" class="btn-icon-preset" data-icon="🎨">🎨</button>
-                    <button type="button" class="btn-icon-preset" data-icon="⚽">⚽</button>
-                    <button type="button" class="btn-icon-preset" data-icon="🌏">🌏</button>
-                    <button type="button" class="btn-icon-preset" data-icon="🎵">🎵</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Mã định danh (ID) <small style="color:var(--gray-500)">(để trống sẽ tự tạo)</small></label>
-                <input type="text" id="group-id-input" placeholder="VD: to_tienganh" class="form-control">
-              </div>
-              <div class="form-group">
-                <label>Thứ tự hiển thị</label>
-                <input type="number" id="group-order-input" placeholder="1, 2, 3..." class="form-control" min="1">
-              </div>
-            </div>
-            <div class="form-actions">
-              <button id="btn-save-group" class="btn-primary">💾 Lưu tổ</button>
-              <button id="btn-cancel-group" class="btn-secondary">Hủy</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="table-wrapper">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th style="text-align:center">Biểu tượng</th>
-                <th>Tên tổ bộ môn</th>
-                <th>Mã tổ (ID)</th>
-                <th>Số thành viên</th>
-                <th>Thứ tự</th>
-                <th>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody id="groups-tbody"></tbody>
           </table>
         </div>
       </div>
