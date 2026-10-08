@@ -2,18 +2,15 @@
 // ADMIN.JS - Logic trang quản lý điểm danh
 // ============================================================
 
-// ---- Admin emails (có quyền truy cập admin) ----
-const ADMIN_EMAILS = [
-  'thanhsonqn98@gmail.com',   // Admin thường
-  'chaosonkhung@gmail.com'    // Super Admin - quyền tối cao
-];
-
-// ---- Super Admin: có quyền chỉnh sửa mọi dữ liệu ----
-const SUPER_ADMIN_EMAILS = [
+// ---- Super Admin duy nhất & fallback khởi tạo ban đầu ----
+const SUPER_ADMIN_EMAIL = 'chaosonkhung@gmail.com';
+const DEFAULT_ADMINS = [
+  'thanhsonqn98@gmail.com',
   'chaosonkhung@gmail.com'
 ];
 
 let isSuperAdmin = false; // Sẽ được set sau khi đăng nhập
+let allAdmins = [];
 
 let currentMeetingId = null;
 let currentDetailGroup = null;
@@ -38,13 +35,27 @@ document.getElementById('btn-logout').addEventListener('click', async () => {
 
 auth.onAuthStateChanged(async (user) => {
   if (user) {
-    if (!ADMIN_EMAILS.includes(user.email)) {
+    const userEmail = (user.email || '').toLowerCase().trim();
+    isSuperAdmin = (userEmail === SUPER_ADMIN_EMAIL.toLowerCase());
+
+    // Kiểm tra quyền Admin: Super Admin, mặc định, hoặc tồn tại trong collection 'admins'
+    let hasAdminAccess = isSuperAdmin || DEFAULT_ADMINS.map(e => e.toLowerCase()).includes(userEmail);
+    if (!hasAdminAccess) {
+      try {
+        const doc = await db.collection('admins').doc(userEmail).get();
+        if (doc.exists) {
+          hasAdminAccess = true;
+        }
+      } catch (err) {
+        console.warn('Lỗi kiểm tra quyền admin:', err);
+      }
+    }
+
+    if (!hasAdminAccess) {
       showToast('Bạn không có quyền admin!', 'error');
       await auth.signOut();
       return;
     }
-    // Set quyền Super Admin
-    isSuperAdmin = SUPER_ADMIN_EMAILS.includes(user.email);
 
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
@@ -52,7 +63,9 @@ auth.onAuthStateChanged(async (user) => {
     const nameEl = document.getElementById('user-name');
     nameEl.textContent = user.displayName || user.email;
     if (isSuperAdmin) {
-      nameEl.innerHTML += ' <span style="background:#f59e0b;color:white;font-size:11px;padding:2px 7px;border-radius:10px;font-weight:700">👑 Super</span>';
+      nameEl.innerHTML += ' <span style="background:#f59e0b;color:white;font-size:11px;padding:2px 7px;border-radius:10px;font-weight:700">👑 Super Admin</span>';
+    } else {
+      nameEl.innerHTML += ' <span style="background:#3b82f6;color:white;font-size:11px;padding:2px 7px;border-radius:10px;font-weight:700">🛡️ Admin</span>';
     }
     await loadAll();
 
@@ -74,11 +87,12 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
 
 // ---- LOAD ALL DATA ----
 async function loadAll() {
-  await Promise.all([loadMembers(), loadMeetings()]);
+  await Promise.all([loadMembers(), loadMeetings(), loadAdmins()]);
   populateMeetingFilters();
   renderDashboard();
   renderMeetingsList();
   renderMembersTable();
+  renderAdminsTable();
   populateSummarySelects();
 }
 
@@ -855,4 +869,175 @@ async function deleteFraud(attendanceId) {
 document.querySelector('[data-tab="fraud"]').addEventListener('click', () => {
   loadFraudData(null);
 });
+
+// ============================================================
+// ---- QUẢN LÝ QUYỀN ADMIN (ADMIN MANAGEMENT) ----
+// ============================================================
+
+async function loadAdmins() {
+  try {
+    const snap = await db.collection('admins').get();
+    allAdmins = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    const existingEmails = new Set(allAdmins.map(a => (a.email || a.id).toLowerCase()));
+
+    // Tự động khởi tạo Super Admin nếu chưa có
+    if (!existingEmails.has(SUPER_ADMIN_EMAIL.toLowerCase())) {
+      const superData = {
+        email: SUPER_ADMIN_EMAIL.toLowerCase(),
+        name: 'Super Admin',
+        role: 'super_admin',
+        addedBy: 'Hệ thống',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      await db.collection('admins').doc(SUPER_ADMIN_EMAIL.toLowerCase()).set(superData);
+      allAdmins.push({ id: SUPER_ADMIN_EMAIL.toLowerCase(), ...superData });
+    }
+
+    // Tự động khởi tạo thanhsonqn98 nếu chưa có
+    if (!existingEmails.has('thanhsonqn98@gmail.com')) {
+      const defaultData = {
+        email: 'thanhsonqn98@gmail.com',
+        name: 'Admin',
+        role: 'admin',
+        addedBy: SUPER_ADMIN_EMAIL,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      await db.collection('admins').doc('thanhsonqn98@gmail.com').set(defaultData);
+      allAdmins.push({ id: 'thanhsonqn98@gmail.com', ...defaultData });
+    }
+
+    // Sắp xếp: Super Admin lên đầu, tiếp theo theo email
+    allAdmins.sort((a, b) => {
+      const emailA = (a.email || a.id).toLowerCase();
+      const emailB = (b.email || b.id).toLowerCase();
+      if (emailA === SUPER_ADMIN_EMAIL.toLowerCase()) return -1;
+      if (emailB === SUPER_ADMIN_EMAIL.toLowerCase()) return 1;
+      return emailA.localeCompare(emailB);
+    });
+  } catch (err) {
+    console.error('Lỗi loadAdmins:', err);
+  }
+}
+
+function renderAdminsTable() {
+  const tbody = document.getElementById('admins-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  allAdmins.forEach((adm, i) => {
+    const email = (adm.email || adm.id).toLowerCase();
+    const isSuper = (email === SUPER_ADMIN_EMAIL.toLowerCase());
+    const tr = document.createElement('tr');
+
+    const roleBadge = isSuper
+      ? '<span class="badge" style="background:#fef3c7;color:#d97706;font-weight:700">👑 Super Admin</span>'
+      : '<span class="badge" style="background:#dbeafe;color:#1e40af">🛡️ Admin</span>';
+
+    // Thao tác:
+    // - Super Admin là duy nhất: không ai được xóa
+    // - Super Admin có thể xóa admin thường
+    // - Admin thường: chỉ được thêm, KHÔNG ĐƯỢC XÓA
+    let actionBtn = '';
+    if (isSuper) {
+      actionBtn = '<span style="color:#9ca3af;font-size:12px;font-style:italic">Duy nhất (Không thể xóa)</span>';
+    } else if (isSuperAdmin) {
+      actionBtn = `<button class="btn-danger" style="font-size:12px;padding:4px 10px" onclick="deleteAdmin('${email}')">🗑️ Xóa quyền</button>`;
+    } else {
+      actionBtn = '<span style="color:#9ca3af;font-size:12px;font-style:italic">Chỉ Super Admin được xóa</span>';
+    }
+
+    tr.innerHTML = `
+      <td>${i + 1}</td>
+      <td style="font-weight:600">${email}</td>
+      <td>${adm.name || '--'}</td>
+      <td>${roleBadge}</td>
+      <td style="font-size:12px;color:#6b7280">${adm.addedBy || '--'}</td>
+      <td style="font-size:12px">${formatDateTime(adm.createdAt)}</td>
+      <td>${actionBtn}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  if (!allAdmins.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:32px">Chưa có quản trị viên nào</td></tr>';
+  }
+}
+
+// Thêm Admin (Cả Super Admin và Admin thường đều thêm được)
+document.getElementById('btn-add-admin')?.addEventListener('click', async () => {
+  const emailInput = document.getElementById('input-admin-email');
+  const nameInput = document.getElementById('input-admin-name');
+  const email = emailInput?.value.trim().toLowerCase();
+  const name = nameInput?.value.trim();
+
+  if (!email) {
+    showToast('Vui lòng nhập email!', 'error');
+    return;
+  }
+  if (!/^[^@]+@[^@]+\.[^@]+$/.test(email)) {
+    showToast('Email không đúng định dạng!', 'error');
+    return;
+  }
+
+  // Kiểm tra trùng
+  const exists = allAdmins.some(a => (a.email || a.id).toLowerCase() === email);
+  if (exists) {
+    showToast('Email này đã có quyền Admin!', 'error');
+    return;
+  }
+
+  const currentUserEmail = auth.currentUser?.email || 'Admin';
+
+  try {
+    const newAdmin = {
+      email,
+      name: name || 'Admin',
+      role: 'admin',
+      addedBy: currentUserEmail,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    await db.collection('admins').doc(email).set(newAdmin);
+    showToast(`✅ Đã cấp quyền Admin cho ${email}!`);
+    emailInput.value = '';
+    if (nameInput) nameInput.value = '';
+
+    await loadAdmins();
+    renderAdminsTable();
+  } catch (err) {
+    showToast('Lỗi: ' + err.message, 'error');
+  }
+});
+
+// Xóa Admin (CHỈ Super Admin mới có quyền)
+async function deleteAdmin(email) {
+  if (!isSuperAdmin) {
+    showToast('Chỉ Super Admin mới có quyền xóa Admin!', 'error');
+    return;
+  }
+  if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
+    showToast('Không thể xóa Super Admin duy nhất!', 'error');
+    return;
+  }
+
+  if (!confirm(`Xác nhận thu hồi quyền Admin của "${email}"?`)) return;
+
+  try {
+    await db.collection('admins').doc(email.toLowerCase()).delete();
+    showToast(`🗑️ Đã thu hồi quyền Admin của ${email}`);
+    await loadAdmins();
+    renderAdminsTable();
+  } catch (err) {
+    showToast('Lỗi: ' + err.message, 'error');
+  }
+}
+window.deleteAdmin = deleteAdmin;
+
+// Load admins data khi chuyển sang tab admins
+document.querySelector('[data-tab="admins"]')?.addEventListener('click', async () => {
+  await loadAdmins();
+  renderAdminsTable();
+});
+
 

@@ -33,6 +33,7 @@
         <button class="nav-tab" data-tab="members">👥 Thành viên</button>
         <button class="nav-tab" data-tab="summary">📈 Tổng kết</button>
         <button class="nav-tab" data-tab="fraud">⚠️ Gian lận</button>
+        <button class="nav-tab" data-tab="admins">🛡️ Quản trị viên</button>
       </div>
       <div class="nav-user">
         <img id="user-avatar" src="" alt="" class="user-avatar">
@@ -384,6 +385,42 @@
               </tr>
             </thead>
             <tbody id="fraud-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB QUẢN TRỊ VIÊN -->
+    <div id="tab-admins" class="tab-content">
+      <div class="container">
+        <div class="page-header">
+          <h1>🛡️ Quản lý Quyền Admin</h1>
+        </div>
+
+        <div class="form-section">
+          <h3>➕ Thêm Admin mới</h3>
+          <p style="color:#6b7280;font-size:13px;margin:6px 0 16px">Nhập email Google của người cần cấp quyền Admin. Người này có thể đăng nhập quản trị ngay lập tức mà không cần chỉnh sửa cấu hình thủ công.</p>
+          <div style="display:flex;gap:12px;max-width:700px;flex-wrap:wrap">
+            <input type="email" id="input-admin-email" placeholder="example@gmail.com *" class="form-control" style="flex:2;min-width:240px">
+            <input type="text" id="input-admin-name" placeholder="Họ tên / Ghi chú (tuỳ chọn)" class="form-control" style="flex:2;min-width:180px">
+            <button id="btn-add-admin" class="btn-primary" style="white-space:nowrap">➕ Thêm Admin</button>
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Email Admin</th>
+                <th>Tên / Ghi chú</th>
+                <th>Vai trò</th>
+                <th>Người cấp</th>
+                <th>Ngày tạo</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="admins-tbody"></tbody>
           </table>
         </div>
       </div>
