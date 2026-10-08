@@ -13,7 +13,7 @@ let userName = null;
 
 // ---- Hiển thị màn hình ----
 function showScreen(screenId) {
-  const screens = ['screen-loading', 'screen-expired', 'screen-invalid',
+  const screens = ['screen-loading', 'screen-not-started', 'screen-expired', 'screen-invalid',
     'screen-already', 'screen-login', 'screen-form', 'screen-success', 'screen-fraud'];
   screens.forEach(id => {
     const el = document.getElementById(id);
@@ -47,9 +47,20 @@ async function initPage() {
       return;
     }
 
-    // Check expiry
+    // Check thời gian mở và hết hạn điểm danh
     const now = new Date();
+    const startTime = meetingData.startTime?.toDate ? meetingData.startTime.toDate() : new Date(meetingData.startTime);
     const endTime = meetingData.endTime?.toDate ? meetingData.endTime.toDate() : new Date(meetingData.endTime);
+
+    // Chưa đến giờ bắt đầu điểm danh
+    if (now < startTime) {
+      const timeEl = document.getElementById('not-started-time');
+      if (timeEl) timeEl.textContent = startTime.toLocaleString('vi-VN');
+      showScreen('screen-not-started');
+      return;
+    }
+
+    // Đã hết thời gian điểm danh
     if (now > endTime) {
       showScreen('screen-expired');
       return;
@@ -154,9 +165,18 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = '⏳ Đang xử lý...';
 
-  // Kiểm tra expiry lần nữa (phòng trường hợp QR hết hạn trong lúc điền form)
+  // Kiểm tra thời gian điểm danh lần nữa (phòng trường hợp bấm gửi trước giờ hoặc sau khi hết hạn)
   const now = new Date();
+  const startTime = meetingData.startTime?.toDate ? meetingData.startTime.toDate() : new Date(meetingData.startTime);
   const endTime = meetingData.endTime?.toDate ? meetingData.endTime.toDate() : new Date(meetingData.endTime);
+
+  if (now < startTime) {
+    const timeEl = document.getElementById('not-started-time');
+    if (timeEl) timeEl.textContent = startTime.toLocaleString('vi-VN');
+    showScreen('screen-not-started');
+    return;
+  }
+
   if (now > endTime) {
     showScreen('screen-expired');
     return;

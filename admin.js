@@ -324,13 +324,19 @@ function renderDashboard() {
   if (meeting) {
     document.getElementById('meeting-info').classList.remove('hidden');
     document.getElementById('meeting-title').textContent = '📌 ' + meeting.name;
-    document.getElementById('meeting-time').textContent = '⏰ ' + formatDateTime(meeting.startTime);
+    document.getElementById('meeting-time').textContent = '⏰ Mở: ' + formatDateTime(meeting.startTime) + ' ➜ Hết hạn: ' + formatDateTime(meeting.endTime);
     const now = new Date();
+    const start = meeting.startTime?.toDate ? meeting.startTime.toDate() : new Date(meeting.startTime);
     const expiry = meeting.endTime?.toDate ? meeting.endTime.toDate() : new Date(meeting.endTime);
-    const isExpired = now > expiry;
-    document.getElementById('meeting-status').innerHTML = isExpired
-      ? '<span class="badge badge-expired">⏱ QR Hết hạn</span>'
-      : '<span class="badge badge-active">✅ QR Còn hiệu lực</span>';
+    let statusBadge = '';
+    if (now < start) {
+      statusBadge = '<span class="badge" style="background:#fef3c7;color:#d97706">⏳ Chưa đến giờ điểm danh</span>';
+    } else if (now > expiry) {
+      statusBadge = '<span class="badge badge-expired">⏱ QR Hết hạn</span>';
+    } else {
+      statusBadge = '<span class="badge badge-active">✅ Đang mở điểm danh</span>';
+    }
+    document.getElementById('meeting-status').innerHTML = statusBadge;
   }
 
   // Valid (non-fraud) attendances
@@ -550,8 +556,8 @@ document.getElementById('btn-create-qr').addEventListener('click', async () => {
       correctLevel: QRCode.CorrectLevel.H
     });
     document.getElementById('qr-meeting-name').textContent = '📋 ' + name;
-    document.getElementById('qr-time-info').textContent = '⏰ Bắt đầu: ' + new Date(start).toLocaleString('vi-VN');
-    document.getElementById('qr-expire-info').textContent = '⚠️ Hết hiệu lực: ' + new Date(end).toLocaleString('vi-VN');
+    document.getElementById('qr-time-info').textContent = '⏳ Mở điểm danh: ' + new Date(start).toLocaleString('vi-VN');
+    document.getElementById('qr-expire-info').textContent = '⚠️ Hết hạn QR: ' + new Date(end).toLocaleString('vi-VN');
     document.getElementById('qr-result').classList.remove('hidden');
     // Store current meeting id for download
     document.getElementById('btn-download-qr').dataset.meetingId = meetingId;
@@ -617,15 +623,23 @@ function renderMeetingsList() {
   tbody.innerHTML = '';
   const now = new Date();
   allMeetings.forEach(m => {
+    const startTime = m.startTime?.toDate ? m.startTime.toDate() : new Date(m.startTime);
     const endTime = m.endTime?.toDate ? m.endTime.toDate() : new Date(m.endTime);
-    const isExpired = now > endTime;
+    let statusBadge = '';
+    if (now < startTime) {
+      statusBadge = '<span class="badge" style="background:#fef3c7;color:#d97706">⏳ Chưa mở</span>';
+    } else if (now > endTime) {
+      statusBadge = '<span class="badge badge-expired">⏱ Hết hạn</span>';
+    } else {
+      statusBadge = '<span class="badge badge-active">✅ Đang mở</span>';
+    }
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${m.name}</td>
       <td>${formatDateTime(m.startTime)}</td>
       <td>${formatDateTime(m.endTime)}</td>
       <td id="count-${m.id}">...</td>
-      <td>${isExpired ? '<span class="badge badge-expired">⏱ Hết hạn</span>' : '<span class="badge badge-active">✅ Hiệu lực</span>'}</td>
+      <td>${statusBadge}</td>
       <td>
         <button class="btn-edit" onclick="showMeetingQR('${m.id}')">Xem QR</button>
         <button class="btn-danger" onclick="deleteMeeting('${m.id}')">Xóa</button>

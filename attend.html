@@ -19,6 +19,15 @@
         <p>Đang tải...</p>
       </div>
 
+      <!-- Chưa đến giờ điểm danh -->
+      <div id="screen-not-started" class="expire-screen hidden">
+        <div class="icon">⏳</div>
+        <h2 style="color:#f59e0b;font-size:20px;font-weight:700;margin-bottom:8px">Chưa Đến Giờ Điểm Danh</h2>
+        <p style="color:#6b7280;font-size:14px">Thời gian điểm danh bắt đầu từ:<br><strong id="not-started-time" style="color:#111827;font-size:16px;display:inline-block;margin-top:6px"></strong></p>
+        <p style="color:#9ca3af;font-size:12px;margin-top:12px">Hệ thống chỉ mở điểm danh khi đến đúng thời gian trên.</p>
+        <button onclick="location.reload()" class="btn-secondary" style="margin-top:16px;width:100%;justify-content:center">🔄 Tải lại trang</button>
+      </div>
+
       <!-- Hết hạn QR -->
       <div id="screen-expired" class="expire-screen hidden">
         <div class="icon">⏰</div>
@@ -136,7 +145,7 @@
     </div>
   </div>
 
-  <script src="firebase-init.js"></script>
-  <script src="attend.js"></script>
+  <script src="firebase-init.js?v=2.3"></script>
+  <script src="attend.js?v=2.3"></script>
 </body>
 </html>
