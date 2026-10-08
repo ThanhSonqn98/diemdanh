@@ -5,17 +5,6 @@
 // ---- Admin emails (có quyền truy cập admin) ----
 const ADMIN_EMAILS = [
   'thanhsonqn98@gmail.com',   // Admin thường
-  'chauthu72@gmail.com',
-
-
-
-
-
-
-
-
-
-  
   'chaosonkhung@gmail.com'    // Super Admin - quyền tối cao
 ];
 
@@ -28,6 +17,8 @@ let isSuperAdmin = false; // Sẽ được set sau khi đăng nhập
 
 let currentMeetingId = null;
 let currentDetailGroup = null;
+let allGroups = [];
+let editingGroupId = null;
 let allMembers = [];
 let editingMemberId = null;
 let allMeetings = [];
@@ -85,12 +76,66 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
 
 // ---- LOAD ALL DATA ----
 async function loadAll() {
+  await loadGroups();
   await Promise.all([loadMembers(), loadMeetings()]);
   populateMeetingFilters();
+  populateMemberGroupSelect();
   renderDashboard();
   renderMeetingsList();
   renderMembersTable();
+  renderGroupsTable();
   populateSummarySelects();
+}
+
+// ---- GROUPS (QUẢN LÝ TỔ BỘ MÔN) ----
+async function loadGroups() {
+  try {
+    const snap = await db.collection('groups').get();
+    if (snap.empty) {
+      // Khởi tạo các tổ mặc định nếu collection rỗng
+      const batch = db.batch();
+      for (const g of DEFAULT_GROUPS) {
+        const ref = db.collection('groups').doc(g.id);
+        batch.set(ref, {
+          name: g.name,
+          icon: g.icon || '🏢',
+          order: g.order || 0,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      try {
+        await batch.commit();
+      } catch (err) {
+        console.warn('Lỗi lưu tổ mặc định vào Firestore:', err);
+      }
+      allGroups = DEFAULT_GROUPS.map(g => ({ ...g }));
+    } else {
+      allGroups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      allGroups.sort((a, b) => (a.order || 0) - (b.order || 0));
+    }
+  } catch (e) {
+    console.warn('Lỗi tải tổ từ database:', e);
+    allGroups = DEFAULT_GROUPS.map(g => ({ ...g }));
+  }
+
+  // Luôn cập nhật từ điển GROUP_NAMES
+  allGroups.forEach(g => {
+    GROUP_NAMES[g.id] = g.name;
+  });
+}
+
+function populateMemberGroupSelect() {
+  const sel = document.getElementById('member-group');
+  if (!sel) return;
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="">-- Chọn tổ --</option>';
+  allGroups.forEach(g => {
+    const opt = document.createElement('option');
+    opt.value = g.id;
+    opt.textContent = `${g.icon ? g.icon + ' ' : ''}${g.name}`;
+    sel.appendChild(opt);
+  });
+  if (currentVal) sel.value = currentVal;
 }
 
 // ---- MEMBERS ----
@@ -128,6 +173,7 @@ document.getElementById('btn-add-member').addEventListener('click', () => {
   document.getElementById('member-form-title').textContent = 'Thêm thành viên';
   document.getElementById('member-name').value = '';
   document.getElementById('member-email').value = '';
+  populateMemberGroupSelect();
   document.getElementById('member-group').value = '';
   document.getElementById('member-role').value = '';
   document.getElementById('member-form-section').classList.remove('hidden');
@@ -172,6 +218,7 @@ document.getElementById('btn-save-member').addEventListener('click', async () =>
     editingMemberId = null;
     await loadMembers();
     renderMembersTable();
+    renderGroupsTable();
   } catch (e) {
     showToast('Lỗi: ' + e.message, 'error');
   }
@@ -184,6 +231,7 @@ function editMember(id) {
   document.getElementById('member-form-title').textContent = 'Sửa thành viên';
   document.getElementById('member-name').value = m.name;
   document.getElementById('member-email').value = m.email;
+  populateMemberGroupSelect();
   document.getElementById('member-group').value = m.group;
   document.getElementById('member-role').value = m.role || '';
   document.getElementById('member-form-section').classList.remove('hidden');
@@ -195,6 +243,7 @@ async function deleteMember(id) {
   await db.collection('members').doc(id).delete();
   await loadMembers();
   renderMembersTable();
+  renderGroupsTable();
   showToast('Đã xóa thành viên');
 }
 
@@ -217,14 +266,25 @@ document.getElementById('import-excel').addEventListener('change', async (e) => 
         if (!name || !email || !group) { skipped++; continue; }
         const existing = allMembers.find(m => m.email === email);
         if (existing) { skipped++; continue; }
-        const groupMap = { 'Tổ 1-2-3': 'to123', 'Tổ 4-5': 'to45', 'Tổ Bộ Môn': 'tobomon', 'Tổ Văn Phòng': 'tovanphong' };
-        const groupKey = groupMap[group] || group;
+        
+        // Tìm tổ tương ứng trong allGroups
+        let groupKey = group;
+        const matched = allGroups.find(g => 
+          g.id.toLowerCase() === group.toLowerCase() || 
+          g.name.toLowerCase() === group.toLowerCase() ||
+          g.name.toLowerCase().includes(group.toLowerCase())
+        );
+        if (matched) {
+          groupKey = matched.id;
+        }
+
         await db.collection('members').add({ name, email, group: groupKey, role, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
         added++;
       }
       showToast(`Import xong: +${added} mới, bỏ qua ${skipped}`);
       await loadMembers();
       renderMembersTable();
+      renderGroupsTable();
     } catch (err) {
       showToast('Lỗi đọc file: ' + err.message, 'error');
     }
@@ -235,14 +295,23 @@ document.getElementById('import-excel').addEventListener('change', async (e) => 
 
 // Export template Excel
 document.getElementById('btn-export-template').addEventListener('click', () => {
-  const ws = XLSX.utils.aoa_to_sheet([[
-    'Họ tên', 'Email', 'Tổ', 'Chức vụ'
-  ], [
-    'Nguyễn Văn A', 'nguyen.a@gmail.com', 'Tổ 1-2-3', 'Giáo viên'
-  ], [
-    'Trần Thị B', 'tran.b@gmail.com', 'Tổ 4-5', 'Giáo viên'
-  ]]);
+  const sampleRows = [
+    ['Họ tên', 'Email', 'Tổ', 'Chức vụ']
+  ];
+  if (allGroups.length) {
+    allGroups.slice(0, 4).forEach((g, i) => {
+      sampleRows.push([
+        `Nguyễn Văn ${String.fromCharCode(65 + i)}`,
+        `giaovien${i + 1}@gmail.com`,
+        g.name,
+        'Giáo viên'
+      ]);
+    });
+  } else {
+    sampleRows.push(['Nguyễn Văn A', 'nguyen.a@gmail.com', 'Tổ 1-2-3', 'Giáo viên']);
+  }
   const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(sampleRows);
   XLSX.utils.book_append_sheet(wb, ws, 'Danh sách');
   XLSX.writeFile(wb, 'mau_danh_sach_giao_vien.xlsx');
 });
@@ -290,7 +359,7 @@ async function loadAttendances() {
 
 // ---- DASHBOARD RENDER ----
 function renderDashboard() {
-  const groups = ['to123', 'to45', 'tobomon', 'tovanphong'];
+  const groupsGrid = document.getElementById('groups-grid');
 
   if (!currentMeetingId) {
     document.getElementById('meeting-info').classList.add('hidden');
@@ -299,13 +368,26 @@ function renderDashboard() {
     document.getElementById('stat-absent').textContent = allMembers.length;
     document.getElementById('stat-excused').textContent = '0';
     document.getElementById('stat-unexcused').textContent = '0';
-    groups.forEach(g => {
-      const count = allMembers.filter(m => m.group === g).length;
-      document.getElementById(`g-${g}-total`).textContent = count;
-      document.getElementById(`g-${g}-present`).textContent = '0';
-      document.getElementById(`g-${g}-excused`).textContent = '0';
-      document.getElementById(`g-${g}-unexcused`).textContent = '0';
-    });
+
+    if (groupsGrid) {
+      groupsGrid.innerHTML = allGroups.map(g => {
+        const count = allMembers.filter(m => m.group === g.id).length;
+        return `
+          <div class="group-card" data-group="${g.id}">
+            <div class="group-header">${g.icon || '🏢'} ${g.name}</div>
+            <div class="group-stats">
+              <div class="gs-item"><span>Tổng:</span> <strong id="g-${g.id}-total">${count}</strong></div>
+              <div class="gs-item present"><span>Có mặt:</span> <strong id="g-${g.id}-present">0</strong></div>
+              <div class="gs-item absent"><span>Vắng có phép:</span> <strong id="g-${g.id}-excused">0</strong></div>
+              <div class="gs-item unexcused"><span>Vắng K.phép:</span> <strong id="g-${g.id}-unexcused">0</strong></div>
+            </div>
+            <button class="btn-view-detail" data-group="${g.id}">Xem chi tiết</button>
+          </div>
+        `;
+      }).join('');
+      attachGroupDetailEvents();
+    }
+
     document.getElementById('attendance-tbody').innerHTML =
       '<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:32px">← Chọn cuộc họp để xem kết quả</td></tr>';
     return;
@@ -342,24 +424,65 @@ function renderDashboard() {
   document.getElementById('stat-excused').textContent = totalExcused;
   document.getElementById('stat-unexcused').textContent = totalUnexcused;
 
-  groups.forEach(g => {
-    const groupMembers = allMembers.filter(m => m.group === g);
-    const groupAttendances = valid.filter(a => a.group === g);
-    const gPresent = groupAttendances.filter(a => a.status === 'present').length;
-    const gExcused = groupAttendances.filter(a => a.status === 'excused').length;
-    const gUnexcused = groupAttendances.filter(a => a.status === 'unexcused').length;
-    document.getElementById(`g-${g}-total`).textContent = groupMembers.length;
-    document.getElementById(`g-${g}-present`).textContent = gPresent;
-    document.getElementById(`g-${g}-excused`).textContent = gExcused;
-    document.getElementById(`g-${g}-unexcused`).textContent = gUnexcused;
-  });
+  if (groupsGrid) {
+    groupsGrid.innerHTML = allGroups.map(g => {
+      const groupMembers = allMembers.filter(m => m.group === g.id);
+      const groupAttendances = valid.filter(a => a.group === g.id);
+      const gPresent = groupAttendances.filter(a => a.status === 'present').length;
+      const gExcused = groupAttendances.filter(a => a.status === 'excused').length;
+      const gUnexcused = groupAttendances.filter(a => a.status === 'unexcused').length;
 
-  // Render all attendances in table
-  renderAttendanceTable(valid, 'Tất cả');
+      return `
+        <div class="group-card" data-group="${g.id}">
+          <div class="group-header">${g.icon || '🏢'} ${g.name}</div>
+          <div class="group-stats">
+            <div class="gs-item"><span>Tổng:</span> <strong id="g-${g.id}-total">${groupMembers.length}</strong></div>
+            <div class="gs-item present"><span>Có mặt:</span> <strong id="g-${g.id}-present">${gPresent}</strong></div>
+            <div class="gs-item absent"><span>Vắng có phép:</span> <strong id="g-${g.id}-excused">${gExcused}</strong></div>
+            <div class="gs-item unexcused"><span>Vắng K.phép:</span> <strong id="g-${g.id}-unexcused">${gUnexcused}</strong></div>
+          </div>
+          <button class="btn-view-detail" data-group="${g.id}">Xem chi tiết</button>
+        </div>
+      `;
+    }).join('');
+    attachGroupDetailEvents();
+  }
+
+  // Render all attendances or filtered group
+  if (currentDetailGroup && allGroups.some(g => g.id === currentDetailGroup)) {
+    const filtered = valid.filter(a => a.group === currentDetailGroup);
+    renderAttendanceTable(filtered, GROUP_NAMES[currentDetailGroup] || currentDetailGroup);
+  } else {
+    currentDetailGroup = null;
+    renderAttendanceTable(valid, 'Tất cả');
+  }
+}
+
+function attachGroupDetailEvents() {
+  document.querySelectorAll('#groups-grid .btn-view-detail').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const group = btn.dataset.group;
+      currentDetailGroup = group;
+      const valid = allAttendances.filter(a => !a.isFraud);
+      const filtered = valid.filter(a => a.group === group);
+      renderAttendanceTable(filtered, GROUP_NAMES[group] || group);
+      document.querySelector('.detail-section').scrollIntoView({ behavior: 'smooth' });
+    });
+  });
 }
 
 function renderAttendanceTable(data, groupTitle) {
-  document.getElementById('detail-group-title').textContent = 'Chi tiết điểm danh - ' + groupTitle;
+  const titleEl = document.getElementById('detail-group-title');
+  if (currentDetailGroup) {
+    titleEl.innerHTML = `Chi tiết điểm danh - ${groupTitle} <button id="btn-show-all-groups" class="btn-secondary" style="font-size:12px;padding:3px 10px;margin-left:12px">👁️ Xem tất cả tổ</button>`;
+    document.getElementById('btn-show-all-groups')?.addEventListener('click', () => {
+      currentDetailGroup = null;
+      const valid = allAttendances.filter(a => !a.isFraud);
+      renderAttendanceTable(valid, 'Tất cả');
+    });
+  } else {
+    titleEl.textContent = 'Chi tiết điểm danh - ' + groupTitle;
+  }
   const tbody = document.getElementById('attendance-tbody');
   tbody.innerHTML = '';
 
@@ -479,20 +602,11 @@ async function saveAttendanceEdit(attendanceId) {
 }
 
 
-// View detail per group
-document.querySelectorAll('.btn-view-detail').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const group = btn.dataset.group;
-    currentDetailGroup = group;
-    const filtered = allAttendances.filter(a => !a.isFraud && a.group === group);
-    renderAttendanceTable(filtered, GROUP_NAMES[group]);
-    document.querySelector('.detail-section').scrollIntoView({ behavior: 'smooth' });
-  });
-});
-
 // Export Excel - attendance
 document.getElementById('btn-export').addEventListener('click', () => {
-  const data = allAttendances.filter(a => !a.isFraud);
+  const data = currentDetailGroup
+    ? allAttendances.filter(a => !a.isFraud && a.group === currentDetailGroup)
+    : allAttendances.filter(a => !a.isFraud);
   const rows = data.map((a, i) => ({
     'STT': i + 1,
     'Họ tên': a.memberName,
@@ -504,8 +618,9 @@ document.getElementById('btn-export').addEventListener('click', () => {
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   const meeting = allMeetings.find(m => m.id === currentMeetingId);
-  XLSX.utils.book_append_sheet(wb, ws, 'Diểm danh');
-  XLSX.writeFile(wb, `diemdanh_${(meeting?.name || 'cuochop').replace(/\s/g, '_')}.xlsx`);
+  const groupSuffix = currentDetailGroup ? `_${(GROUP_NAMES[currentDetailGroup] || currentDetailGroup).replace(/\s/g, '_')}` : '';
+  XLSX.utils.book_append_sheet(wb, ws, 'Điểm danh');
+  XLSX.writeFile(wb, `diemdanh_${(meeting?.name || 'cuochop').replace(/\s/g, '_')}${groupSuffix}.xlsx`);
 });
 
 // ---- CREATE QR ----
@@ -860,5 +975,184 @@ async function deleteFraud(attendanceId) {
 // Load fraud data khi chuyển sang tab
 document.querySelector('[data-tab="fraud"]').addEventListener('click', () => {
   loadFraudData(null);
+});
+
+// ============================================================
+// QUẢN LÝ TỔ BỘ MÔN (GROUPS MANAGEMENT)
+// ============================================================
+
+function slugifyGroup(name) {
+  let str = name.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .replace(/[^a-z0-9]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+  if (!str.startsWith('to_') && !str.startsWith('to')) {
+    str = 'to_' + str;
+  }
+  return str || ('to_' + Date.now().toString(36));
+}
+
+function renderGroupsTable() {
+  const tbody = document.getElementById('groups-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  allGroups.forEach((g, i) => {
+    const memberCount = allMembers.filter(m => m.group === g.id).length;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${i + 1}</td>
+      <td style="font-size:22px;text-align:center">${g.icon || '🏢'}</td>
+      <td><strong>${g.name}</strong></td>
+      <td><code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:12px">${g.id}</code></td>
+      <td><span class="badge" style="background:#e0e7ff;color:#3730a3">${memberCount} người</span></td>
+      <td>${g.order || i + 1}</td>
+      <td>
+        <button class="btn-edit" onclick="editGroup('${g.id}')">Sửa</button>
+        <button class="btn-danger" onclick="deleteGroup('${g.id}')">Xóa</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+  if (!allGroups.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:32px">Chưa có tổ bộ môn nào</td></tr>';
+  }
+}
+
+function editGroup(id) {
+  const g = allGroups.find(x => x.id === id);
+  if (!g) return;
+  editingGroupId = id;
+  document.getElementById('group-form-title').textContent = 'Sửa tổ bộ môn: ' + g.name;
+  document.getElementById('group-name-input').value = g.name;
+  document.getElementById('group-icon-input').value = g.icon || '🏢';
+  document.getElementById('group-id-input').value = g.id;
+  document.getElementById('group-id-input').disabled = true;
+  document.getElementById('group-order-input').value = g.order || 1;
+  document.getElementById('group-form-section').classList.remove('hidden');
+  document.getElementById('group-form-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function deleteGroup(id) {
+  const g = allGroups.find(x => x.id === id);
+  if (!g) return;
+
+  const memberCount = allMembers.filter(m => m.group === id).length;
+  if (memberCount > 0) {
+    alert(`Không thể xóa tổ "${g.name}" vì hiện đang có ${memberCount} thành viên thuộc tổ này!\n\nVui lòng chuyển các thành viên sang tổ khác trước khi xóa.`);
+    return;
+  }
+
+  if (!confirm(`Bạn có chắc chắn muốn xóa tổ "${g.name}"?`)) return;
+
+  try {
+    await db.collection('groups').doc(id).delete();
+    showToast('Đã xóa tổ bộ môn');
+    await loadGroups();
+    populateMemberGroupSelect();
+    renderGroupsTable();
+    renderDashboard();
+  } catch (e) {
+    showToast('Lỗi: ' + e.message, 'error');
+  }
+}
+
+// Thêm tổ mới
+document.getElementById('btn-add-group')?.addEventListener('click', () => {
+  editingGroupId = null;
+  document.getElementById('group-form-title').textContent = 'Thêm tổ bộ môn mới';
+  document.getElementById('group-name-input').value = '';
+  document.getElementById('group-icon-input').value = '🏢';
+  document.getElementById('group-id-input').value = '';
+  document.getElementById('group-id-input').disabled = false;
+  document.getElementById('group-order-input').value = allGroups.length + 1;
+  document.getElementById('group-form-section').classList.remove('hidden');
+  document.getElementById('group-form-section').scrollIntoView({ behavior: 'smooth' });
+});
+
+document.getElementById('btn-cancel-group')?.addEventListener('click', () => {
+  document.getElementById('group-form-section').classList.add('hidden');
+  editingGroupId = null;
+});
+
+// Icon presets buttons
+document.querySelectorAll('.btn-icon-preset').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const icon = btn.dataset.icon;
+    const input = document.getElementById('group-icon-input');
+    if (input) input.value = icon;
+  });
+});
+
+// Lưu tổ
+document.getElementById('btn-save-group')?.addEventListener('click', async () => {
+  const name = document.getElementById('group-name-input').value.trim();
+  const icon = document.getElementById('group-icon-input').value.trim() || '🏢';
+  let idInput = document.getElementById('group-id-input').value.trim();
+  const order = parseInt(document.getElementById('group-order-input').value) || (allGroups.length + 1);
+
+  if (!name) {
+    showToast('Vui lòng nhập tên tổ bộ môn', 'error');
+    return;
+  }
+
+  try {
+    if (editingGroupId) {
+      await db.collection('groups').doc(editingGroupId).update({
+        name,
+        icon,
+        order,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      showToast('Đã cập nhật tổ bộ môn');
+    } else {
+      let targetId = idInput;
+      if (!targetId) {
+        targetId = slugifyGroup(name);
+      } else {
+        targetId = targetId.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+      }
+
+      // Kiểm tra trùng ID
+      if (allGroups.some(g => g.id === targetId)) {
+        targetId = `${targetId}_${Date.now().toString(36).slice(-4)}`;
+      }
+
+      await db.collection('groups').doc(targetId).set({
+        name,
+        icon,
+        order,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      showToast('Đã thêm tổ bộ môn mới');
+    }
+
+    document.getElementById('group-form-section').classList.add('hidden');
+    editingGroupId = null;
+    await loadGroups();
+    populateMemberGroupSelect();
+    renderGroupsTable();
+    renderMembersTable();
+    renderDashboard();
+  } catch (e) {
+    showToast('Lỗi: ' + e.message, 'error');
+  }
+});
+
+// Nút chuyển nhanh sang quản lý tổ từ tab thành viên
+document.getElementById('btn-quick-groups')?.addEventListener('click', () => {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  const tabBtn = document.querySelector('.nav-tab[data-tab="groups"]');
+  if (tabBtn) tabBtn.classList.add('active');
+  const tabContent = document.getElementById('tab-groups');
+  if (tabContent) tabContent.classList.add('active');
+  renderGroupsTable();
+});
+
+// Khi chuyển sang tab groups
+document.querySelector('[data-tab="groups"]')?.addEventListener('click', () => {
+  renderGroupsTable();
 });
 

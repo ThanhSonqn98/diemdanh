@@ -343,3 +343,24 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
   .groups-grid { grid-template-columns: 1fr; }
   .nav-user #user-name { display: none; }
 }
+
+/* ---- ICON PRESETS ---- */
+.btn-icon-preset {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--gray-200);
+  background: white;
+  border-radius: var(--radius-sm);
+  font-size: 18px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.btn-icon-preset:hover {
+  background: var(--gray-100);
+  border-color: var(--primary);
+  transform: scale(1.1);
+}
+
