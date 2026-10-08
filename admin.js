@@ -877,22 +877,15 @@ document.querySelector('[data-tab="fraud"]').addEventListener('click', () => {
 async function loadAdmins() {
   try {
     const snap = await db.collection('admins').get();
-    allAdmins = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Lọc bỏ hoàn toàn Super Admin để không bao giờ xuất hiện trong danh sách quản trị viên
+    allAdmins = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(a => {
+        const e = (a.email || a.id || '').toLowerCase().trim();
+        return e !== 'chaosonkhung@gmail.com';
+      });
 
-    const existingEmails = new Set(allAdmins.map(a => (a.email || a.id).toLowerCase()));
-
-    // Tự động khởi tạo Super Admin nếu chưa có
-    if (!existingEmails.has(SUPER_ADMIN_EMAIL.toLowerCase())) {
-      const superData = {
-        email: SUPER_ADMIN_EMAIL.toLowerCase(),
-        name: 'Super Admin',
-        role: 'super_admin',
-        addedBy: 'Hệ thống',
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      };
-      await db.collection('admins').doc(SUPER_ADMIN_EMAIL.toLowerCase()).set(superData);
-      allAdmins.push({ id: SUPER_ADMIN_EMAIL.toLowerCase(), ...superData });
-    }
+    const existingEmails = new Set(allAdmins.map(a => (a.email || a.id || '').toLowerCase().trim()));
 
     // Tự động khởi tạo thanhsonqn98 nếu chưa có
     if (!existingEmails.has('thanhsonqn98@gmail.com')) {
@@ -900,19 +893,17 @@ async function loadAdmins() {
         email: 'thanhsonqn98@gmail.com',
         name: 'Admin',
         role: 'admin',
-        addedBy: SUPER_ADMIN_EMAIL,
+        addedBy: 'Hệ thống',
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       };
       await db.collection('admins').doc('thanhsonqn98@gmail.com').set(defaultData);
       allAdmins.push({ id: 'thanhsonqn98@gmail.com', ...defaultData });
     }
 
-    // Sắp xếp: Super Admin lên đầu, tiếp theo theo email
+    // Sắp xếp theo email
     allAdmins.sort((a, b) => {
       const emailA = (a.email || a.id).toLowerCase();
       const emailB = (b.email || b.id).toLowerCase();
-      if (emailA === SUPER_ADMIN_EMAIL.toLowerCase()) return -1;
-      if (emailB === SUPER_ADMIN_EMAIL.toLowerCase()) return 1;
       return emailA.localeCompare(emailB);
     });
   } catch (err) {
@@ -925,41 +916,42 @@ function renderAdminsTable() {
   if (!tbody) return;
   tbody.innerHTML = '';
 
-  allAdmins.forEach((adm, i) => {
-    const email = (adm.email || adm.id).toLowerCase();
-    const isSuper = (email === SUPER_ADMIN_EMAIL.toLowerCase());
-    const tr = document.createElement('tr');
+  let count = 0;
+  allAdmins.forEach((adm) => {
+    const email = (adm.email || adm.id || '').toLowerCase().trim();
+    // Bỏ qua tuyệt đối tài khoản Super Admin ẩn danh
+    if (email === 'chaosonkhung@gmail.com') return;
 
-    const roleBadge = isSuper
-      ? '<span class="badge" style="background:#fef3c7;color:#d97706;font-weight:700">👑 Super Admin</span>'
-      : '<span class="badge" style="background:#dbeafe;color:#1e40af">🛡️ Admin</span>';
+    count++;
+    const tr = document.createElement('tr');
+    const roleBadge = '<span class="badge" style="background:#dbeafe;color:#1e40af">🛡️ Admin</span>';
 
     // Thao tác:
-    // - Super Admin là duy nhất: không ai được xóa
-    // - Super Admin có thể xóa admin thường
-    // - Admin thường: chỉ được thêm, KHÔNG ĐƯỢC XÓA
-    let actionBtn = '';
-    if (isSuper) {
-      actionBtn = '<span style="color:#9ca3af;font-size:12px;font-style:italic">Duy nhất (Không thể xóa)</span>';
-    } else if (isSuperAdmin) {
-      actionBtn = `<button class="btn-danger" style="font-size:12px;padding:4px 10px" onclick="deleteAdmin('${email}')">🗑️ Xóa quyền</button>`;
-    } else {
-      actionBtn = '<span style="color:#9ca3af;font-size:12px;font-style:italic">Chỉ Super Admin được xóa</span>';
+    // - Chỉ Super Admin khi đăng nhập mới nhìn thấy nút "Xóa quyền"
+    // - Admin thường: không có nút xóa (hiển thị --)
+    let actionBtn = isSuperAdmin
+      ? `<button class="btn-danger" style="font-size:12px;padding:4px 10px" onclick="deleteAdmin('${email}')">🗑️ Xóa quyền</button>`
+      : '<span style="color:#9ca3af;font-size:13px">--</span>';
+
+    // Bảo mật danh tính Super Admin: nếu do Super Admin thêm thì hiển thị "Hệ thống"
+    let addedByDisplay = adm.addedBy || '--';
+    if (addedByDisplay.toLowerCase().trim() === 'chaosonkhung@gmail.com') {
+      addedByDisplay = 'Hệ thống';
     }
 
     tr.innerHTML = `
-      <td>${i + 1}</td>
+      <td>${count}</td>
       <td style="font-weight:600">${email}</td>
       <td>${adm.name || '--'}</td>
       <td>${roleBadge}</td>
-      <td style="font-size:12px;color:#6b7280">${adm.addedBy || '--'}</td>
+      <td style="font-size:12px;color:#6b7280">${addedByDisplay}</td>
       <td style="font-size:12px">${formatDateTime(adm.createdAt)}</td>
       <td>${actionBtn}</td>
     `;
     tbody.appendChild(tr);
   });
 
-  if (!allAdmins.length) {
+  if (count === 0) {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:32px">Chưa có quản trị viên nào</td></tr>';
   }
 }
@@ -980,6 +972,12 @@ document.getElementById('btn-add-admin')?.addEventListener('click', async () => 
     return;
   }
 
+  // Không cho thêm lại Super Admin vì Super Admin là tài khoản ẩn
+  if (email === SUPER_ADMIN_EMAIL.toLowerCase()) {
+    showToast('Tài khoản này đã có quyền tối cao!', 'info');
+    return;
+  }
+
   // Kiểm tra trùng
   const exists = allAdmins.some(a => (a.email || a.id).toLowerCase() === email);
   if (exists) {
@@ -987,7 +985,8 @@ document.getElementById('btn-add-admin')?.addEventListener('click', async () => 
     return;
   }
 
-  const currentUserEmail = auth.currentUser?.email || 'Admin';
+  // Ẩn danh tính: nếu Super Admin thêm, lưu người cấp là "Hệ thống"
+  const currentUserEmail = isSuperAdmin ? 'Hệ thống' : (auth.currentUser?.email || 'Admin');
 
   try {
     const newAdmin = {
@@ -1014,10 +1013,6 @@ document.getElementById('btn-add-admin')?.addEventListener('click', async () => 
 async function deleteAdmin(email) {
   if (!isSuperAdmin) {
     showToast('Chỉ Super Admin mới có quyền xóa Admin!', 'error');
-    return;
-  }
-  if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
-    showToast('Không thể xóa Super Admin duy nhất!', 'error');
     return;
   }
 
