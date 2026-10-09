@@ -1315,7 +1315,7 @@ function populateSummarySelects() {
   const now = new Date();
   monthSel.value = now.getMonth() + 1;
   yearSel.innerHTML = '';
-  for (let y = now.getFullYear() - 1; y <= now.getFullYear() + 1; y++) {
+  for (let y = now.getFullYear() - 5; y <= now.getFullYear() + 5; y++) {
     const opt = document.createElement('option');
     opt.value = y; opt.textContent = y; yearSel.appendChild(opt);
   }
