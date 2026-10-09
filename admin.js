@@ -1080,6 +1080,12 @@ document.getElementById('btn-export').addEventListener('click', () => {
   XLSX.writeFile(wb, `diemdanh_${(meeting?.name || 'cuochop').replace(/\s/g, '_')}.xlsx`);
 });
 
+function getAttendUrl(meetingId, token) {
+  const base = window.location.href.split('?')[0].split('#')[0];
+  const dir = base.substring(0, base.lastIndexOf('/') + 1);
+  return `${dir}attend.html?m=${meetingId}&t=${token}`;
+}
+
 // ---- CREATE QR ----
 document.getElementById('btn-create-qr').addEventListener('click', async () => {
   const name = document.getElementById('meeting-name').value.trim();
@@ -1105,7 +1111,7 @@ document.getElementById('btn-create-qr').addEventListener('click', async () => {
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     const meetingId = ref.id;
-    const url = `${location.origin}/attend.html?m=${meetingId}&t=${token}`;
+    const url = getAttendUrl(meetingId, token);
     // Render QR
     document.getElementById('qr-code-display').innerHTML = '';
     new QRCode(document.getElementById('qr-code-display'), {
@@ -1219,7 +1225,7 @@ function renderMeetingsList() {
 async function showMeetingQR(id) {
   const meeting = allMeetings.find(m => m.id === id);
   if (!meeting) return;
-  const url = `${location.origin}/attend.html?m=${id}&t=${meeting.token}`;
+  const url = getAttendUrl(id, meeting.token);
   const modalBody = document.getElementById('modal-body');
   modalBody.innerHTML = '<div id="modal-qr-display" style="display:flex;flex-direction:column;align-items:center;gap:16px"></div>';
   document.getElementById('modal-title').textContent = meeting.name;

@@ -24,7 +24,7 @@ function showScreen(screenId) {
 }
 
 // ---- Validate QR & Load meeting ----
-async function initPage() {
+function initPage() {
   showScreen('screen-loading');
 
   if (!meetingId || !token) {
@@ -32,6 +32,60 @@ async function initPage() {
     return;
   }
 
+  // Lắng nghe trạng thái đăng nhập Firebase
+  auth.onAuthStateChanged(async (user) => {
+    if (user) {
+      userEmail = user.email.toLowerCase();
+      userName = user.displayName || '';
+      await processMeetingForUser();
+    } else {
+      userEmail = null;
+      userName = null;
+      // Người dùng chưa đăng nhập: Thử đọc thông tin cuộc họp (nếu Firestore cho phép đọc công khai)
+      try {
+        const snap = await db.collection('meetings').doc(meetingId).get();
+        if (!snap.exists) {
+          showScreen('screen-invalid');
+          return;
+        }
+
+        meetingData = { id: snap.id, ...snap.data() };
+
+        if (meetingData.token !== token) {
+          showScreen('screen-invalid');
+          return;
+        }
+
+        // Check thời gian mở và hết hạn điểm danh
+        const now = new Date();
+        const startTime = meetingData.startTime?.toDate ? meetingData.startTime.toDate() : new Date(meetingData.startTime);
+        const endTime = meetingData.endTime?.toDate ? meetingData.endTime.toDate() : new Date(meetingData.endTime);
+
+        if (now < startTime) {
+          const timeEl = document.getElementById('not-started-time');
+          if (timeEl) timeEl.textContent = startTime.toLocaleString('vi-VN');
+          showScreen('screen-not-started');
+          return;
+        }
+
+        if (now > endTime) {
+          showScreen('screen-expired');
+          return;
+        }
+
+        document.getElementById('login-meeting-name').textContent = meetingData.name;
+      } catch (err) {
+        console.warn('Chưa đọc được cuộc họp trước khi đăng nhập (yêu cầu đăng nhập trước):', err);
+        document.getElementById('login-meeting-name').textContent = 'Cuộc họp điểm danh';
+      }
+      showScreen('screen-login');
+    }
+  });
+}
+
+// Xử lý sau khi người dùng đã đăng nhập Google
+async function processMeetingForUser() {
+  showScreen('screen-loading');
   try {
     const snap = await db.collection('meetings').doc(meetingId).get();
     if (!snap.exists) {
@@ -66,21 +120,13 @@ async function initPage() {
       return;
     }
 
-    // Kiểm tra auth state
-    auth.onAuthStateChanged((user) => {
-      if (user) {
-        userEmail = user.email.toLowerCase();
-        userName = user.displayName || '';
-        onUserLoggedIn();
-      } else {
-        // Hiện màn hình đăng nhập Google
-        document.getElementById('login-meeting-name').textContent = meetingData.name;
-        showScreen('screen-login');
-      }
-    });
+    await onUserLoggedIn();
 
   } catch (e) {
-    console.error(e);
+    console.error('Lỗi tải cuộc họp:', e);
+    if (e.code === 'permission-denied') {
+      alert('⚠️ Lỗi phân quyền Firebase: Tài khoản của bạn (' + (userEmail || '') + ') chưa được cấp quyền đọc dữ liệu Firestore.\nVui lòng cập nhật lại Firestore Rules trên Firebase Console!');
+    }
     showScreen('screen-invalid');
   }
 }
@@ -88,9 +134,11 @@ async function initPage() {
 // ---- Đăng nhập Google ----
 document.getElementById('btn-google-login').addEventListener('click', async () => {
   try {
+    showScreen('screen-loading');
     await auth.signInWithPopup(provider);
-    // onAuthStateChanged sẽ tự chạy tiếp
+    // onAuthStateChanged sẽ tự động bắt sự kiện và gọi processMeetingForUser()
   } catch (e) {
+    showScreen('screen-login');
     alert('Lỗi đăng nhập: ' + e.message);
   }
 });
@@ -111,6 +159,8 @@ async function onUserLoggedIn() {
     let msg = `Bạn đã điểm danh cuộc họp "${meetingData.name}".`;
     if (existing.isFraud) msg += ' (Đã ghi nhận bất thường)';
     document.getElementById('already-msg').textContent = msg;
+    const emailEl = document.getElementById('already-user-email');
+    if (emailEl) emailEl.textContent = userEmail;
     showScreen('screen-already');
     return;
   }
@@ -264,6 +314,40 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
     alert('Lỗi: ' + e.message);
   }
 });
+
+// ---- Đổi tài khoản Google khác để điểm danh ----
+async function handleSignOutAndSwitch() {
+  try {
+    await auth.signOut();
+    userEmail = null;
+    userName = null;
+    const nameInput = document.getElementById('input-name');
+    if (nameInput) nameInput.value = '';
+    const groupSelect = document.getElementById('input-group');
+    if (groupSelect) groupSelect.value = '';
+    const chkAbsent = document.getElementById('chk-absent');
+    if (chkAbsent) chkAbsent.checked = false;
+    const absentSection = document.getElementById('absent-reason-section');
+    if (absentSection) absentSection.classList.add('hidden');
+    document.querySelectorAll('input[name="absent-type"]').forEach(r => r.checked = false);
+    const btn = document.getElementById('btn-submit');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '✅ Điểm Danh';
+    }
+    if (meetingData) {
+      document.getElementById('login-meeting-name').textContent = meetingData.name;
+    }
+    showScreen('screen-login');
+  } catch (err) {
+    alert('Lỗi đăng xuất: ' + err.message);
+  }
+}
+
+document.getElementById('btn-switch-account-already')?.addEventListener('click', handleSignOutAndSwitch);
+document.getElementById('btn-switch-account-success')?.addEventListener('click', handleSignOutAndSwitch);
+document.getElementById('btn-switch-account-form')?.addEventListener('click', handleSignOutAndSwitch);
+document.getElementById('btn-switch-account-fraud')?.addEventListener('click', handleSignOutAndSwitch);
 
 // ---- Khởi động ----
 initPage();

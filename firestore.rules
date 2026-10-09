@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Super Admin là duy nhất
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.email == 'chaosonkhung@gmail.com';
+    }
+
+    // Admin: Là Super Admin, hoặc email thanhsonqn98, hoặc email tồn tại trong danh sách /admins/
+    function isAdmin() {
+      return request.auth != null && (
+        isSuperAdmin() ||
+        request.auth.token.email == 'thanhsonqn98@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.token.email))
+      );
+    }
+
+    // 1. Quản trị viên (admins): Admin và Super Admin đều thêm được; chỉ Super Admin mới được xóa
+    match /admins/{adminEmail} {
+      allow read: if request.auth != null;
+      allow create: if isAdmin();
+      allow update: if isSuperAdmin();
+      allow delete: if isSuperAdmin() && adminEmail != 'chaosonkhung@gmail.com';
+    }
+
+    // 2. Thành viên (members): Admin toàn quyền, giáo viên/thành viên đã đăng nhập đọc để xác minh
+    match /members/{memberId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // 3. Cuộc họp (meetings): Cho phép đọc công khai để ai quét QR cũng tải được tên cuộc họp và thời gian; chỉ Admin tạo/sửa/xóa
+    match /meetings/{meetingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 4. Tổ bộ môn (groups)
+    match /groups/{groupId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 5. Điểm danh (attendances): Người dùng đã đăng nhập tạo điểm danh và xem trạng thái; chỉ Admin sửa/xóa
+    match /attendances/{attendanceId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if isAdmin();
+    }
+  }
+}

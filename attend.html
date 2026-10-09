@@ -47,6 +47,15 @@
         <div class="success-icon">✅</div>
         <h2>Đã Điểm Danh</h2>
         <p id="already-msg">Bạn đã điểm danh cho cuộc họp này rồi.</p>
+        <div id="already-account-info" style="margin-top:16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:10px;padding:12px 14px;font-size:13px;text-align:left">
+          <div style="color:var(--gray-500);font-size:12px;margin-bottom:2px">Tài khoản Google đang lưu trên máy:</div>
+          <div style="font-weight:600;color:var(--primary);word-break:break-all" id="already-user-email"></div>
+        </div>
+        <div style="margin-top:18px;display:flex;flex-direction:column;gap:10px">
+          <button id="btn-switch-account-already" class="btn-secondary" style="width:100%;justify-content:center;padding:12px">
+            🔄 Đổi tài khoản Google khác để điểm danh
+          </button>
+        </div>
       </div>
 
       <!-- Cần đăng nhập Google -->
@@ -74,14 +83,19 @@
         <h2 id="form-meeting-name"></h2>
         <p class="subtitle" id="form-meeting-time"></p>
 
-        <!-- Email display (khóa cứng) -->
-        <div class="email-display">
-          <span class="email-icon">🔐</span>
-          <div>
-            <div class="email-text">Email xác minh:</div>
-            <div class="email-addr" id="display-email"></div>
-            <div class="email-note">Email này được lấy từ tài khoản Google, không thể thay đổi</div>
+        <!-- Email display (khóa cứng kèm nút đổi tài khoản) -->
+        <div class="email-display" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1">
+            <span class="email-icon">🔐</span>
+            <div style="min-width:0">
+              <div class="email-text">Email xác minh:</div>
+              <div class="email-addr" id="display-email" style="word-break:break-all"></div>
+              <div class="email-note">Email từ Google</div>
+            </div>
           </div>
+          <button type="button" id="btn-switch-account-form" class="btn-secondary" style="padding:6px 12px;font-size:12px;white-space:nowrap;flex-shrink:0" title="Đổi sang tài khoản Google khác">
+            🔄 Đổi tài khoản
+          </button>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:14px;margin-top:4px">
@@ -133,6 +147,11 @@
         <h2 id="success-title">Điểm Danh Thành Công!</h2>
         <p id="success-msg"></p>
         <div id="success-details" style="margin-top:16px;background:#f0fdf4;border-radius:10px;padding:16px;text-align:left;font-size:14px"></div>
+        <div style="margin-top:20px;display:flex;flex-direction:column;gap:10px">
+          <button id="btn-switch-account-success" class="btn-secondary" style="width:100%;justify-content:center;padding:12px">
+            👥 Điểm danh cho người tiếp theo (Đổi tài khoản Google)
+          </button>
+        </div>
       </div>
 
       <!-- Gian lận phát hiện -->
@@ -140,12 +159,17 @@
         <div class="error-icon">⚠️</div>
         <h2 style="color:#f59e0b">Phát Hiện Bất Thường</h2>
         <p id="fraud-msg">Email đăng nhập không khớp với email đã đăng ký. Trường hợp này đã được ghi nhận.</p>
+        <div style="margin-top:20px">
+          <button id="btn-switch-account-fraud" class="btn-secondary" style="width:100%;justify-content:center;padding:12px">
+            🔄 Đổi tài khoản Google khác
+          </button>
+        </div>
       </div>
 
     </div>
   </div>
 
-  <script src="firebase-init.js?v=2.3"></script>
-  <script src="attend.js?v=2.3"></script>
+  <script src="firebase-init.js?v=2.6"></script>
+  <script src="attend.js?v=2.6"></script>
 </body>
 </html>
