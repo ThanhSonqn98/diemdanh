@@ -102,17 +102,45 @@ async function loadMembers() {
   allMembers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-function renderMembersTable() {
+function renderMembersTable(list = null) {
+  const searchInput = document.getElementById('search-member-input');
+  const countEl = document.getElementById('search-member-count');
+  const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+  let displayList = list;
+  if (!displayList) {
+    if (query) {
+      displayList = allMembers.filter(m => {
+        const name = (m.name || '').toLowerCase();
+        const email = (m.email || '').toLowerCase();
+        const groupCode = (m.group || '').toLowerCase();
+        const groupName = (GROUP_NAMES[m.group] || '').toLowerCase();
+        const role = (m.role || '').toLowerCase();
+        return name.includes(query) || email.includes(query) || groupCode.includes(query) || groupName.includes(query) || role.includes(query);
+      });
+    } else {
+      displayList = allMembers;
+    }
+  }
+
+  if (countEl) {
+    if (query) {
+      countEl.innerHTML = `Tìm thấy <strong style="color:var(--primary)">${displayList.length}</strong> / ${allMembers.length} thành viên`;
+    } else {
+      countEl.textContent = `Tổng số: ${allMembers.length} thành viên`;
+    }
+  }
+
   const tbody = document.getElementById('members-tbody');
   tbody.innerHTML = '';
-  allMembers.forEach((m, i) => {
+  displayList.forEach((m, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${i + 1}</td>
-      <td>${m.name}</td>
-      <td>${m.email}</td>
-      <td>${GROUP_NAMES[m.group] || m.group}</td>
-      <td>${m.role || '--'}</td>
+      <td>${escapeHtml(m.name)}</td>
+      <td>${escapeHtml(m.email)}</td>
+      <td>${escapeHtml(GROUP_NAMES[m.group] || m.group)}</td>
+      <td>${escapeHtml(m.role || '--')}</td>
       <td>
         <button class="btn-edit" onclick="editMember('${m.id}')">Sửa</button>
         <button class="btn-danger" onclick="deleteMember('${m.id}')">Xóa</button>
@@ -120,10 +148,19 @@ function renderMembersTable() {
     `;
     tbody.appendChild(tr);
   });
-  if (!allMembers.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:32px">Chưa có thành viên nào</td></tr>';
+  if (!displayList.length) {
+    if (query) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:32px">🔍 Không tìm thấy thành viên nào khớp với "<strong>${escapeHtml(query)}</strong>"</td></tr>`;
+    } else {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#6b7280;padding:32px">Chưa có thành viên nào</td></tr>';
+    }
   }
 }
+
+// Lắng nghe sự kiện tìm kiếm thành viên theo thời gian thực
+document.getElementById('search-member-input')?.addEventListener('input', () => {
+  renderMembersTable();
+});
 
 // Add member button
 document.getElementById('btn-add-member').addEventListener('click', () => {
@@ -1393,12 +1430,23 @@ async function loadFraudData(meetingId) {
         <button class="btn-danger" style="font-size:11px;padding:4px 8px"
           onclick="deleteFraud('${f.id}')">🗑️ Xóa</button>
       </td>` : '';
+    // Xác định Email trong hệ thống
+    const regMember = allMembers.find(m => (m.email || '').toLowerCase() === (f.email || '').toLowerCase());
+    let systemEmailHtml = '';
+    if (regMember) {
+      systemEmailHtml = `<span style="color:#1e40af;font-size:12px;font-weight:500">${escapeHtml(regMember.email)}</span>`;
+    } else if (f.claimedEmail && f.claimedEmail.toLowerCase() !== (f.email || '').toLowerCase()) {
+      systemEmailHtml = `<span style="color:#1e40af;font-size:12px;font-weight:500">${escapeHtml(f.claimedEmail)}</span>`;
+    } else {
+      systemEmailHtml = `<span style="color:#9ca3af;font-size:12px;font-style:italic">Chưa có trong hệ thống</span>`;
+    }
+
     tr.innerHTML = `
-      <td>${meeting?.name || f.meetingId}</td>
-      <td>${f.memberName || '--'}</td>
-      <td style="color:#6b7280;font-size:12px">${f.claimedEmail || '--'}</td>
-      <td style="color:#ef4444;font-size:12px">${f.email || '--'}</td>
-      <td><span class="badge badge-fraud">${f.fraudType || 'Email không khớp'}</span></td>
+      <td>${escapeHtml(meeting?.name || f.meetingId)}</td>
+      <td>${escapeHtml(f.memberName || '--')}</td>
+      <td>${systemEmailHtml}</td>
+      <td style="color:#ef4444;font-size:12px;font-weight:500">${escapeHtml(f.email || '--')}</td>
+      <td><span class="badge badge-fraud">${escapeHtml(f.fraudType || 'Không hợp lệ')}</span></td>
       <td style="font-size:12px">${formatDateTime(f.timestamp)}</td>
       ${superAdminActions}
     `;

@@ -319,6 +319,15 @@
           </div>
         </div>
 
+        <!-- Thanh tìm kiếm thành viên -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px;flex-wrap:wrap">
+          <div style="position:relative;flex:1;max-width:440px;min-width:240px">
+            <input type="text" id="search-member-input" placeholder="🔍 Tìm theo họ tên, email, tổ, chức vụ..." class="form-control" style="width:100%;padding-left:36px">
+            <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#9ca3af;pointer-events:none">🔍</span>
+          </div>
+          <div id="search-member-count" style="font-size:13px;color:#6b7280;font-weight:500"></div>
+        </div>
+
         <div class="table-wrapper">
           <table class="data-table">
             <thead>
@@ -397,9 +406,9 @@
               <tr>
                 <th>Cuộc họp</th>
                 <th>Tên khai báo</th>
-                <th>Email khai báo</th>
+                <th>Email trong hệ thống</th>
                 <th>Email đăng nhập thực</th>
-                <th>Loại gian lận</th>
+                <th>Loại vi phạm</th>
                 <th>Thời gian</th>
               </tr>
             </thead>
@@ -469,7 +478,7 @@
     </div>
   </div>
 
-  <script src="firebase-init.js?v=3.2"></script>
-  <script src="admin.js?v=3.2"></script>
+  <script src="firebase-init.js?v=3.3"></script>
+  <script src="admin.js?v=3.3"></script>
 </body>
 </html>

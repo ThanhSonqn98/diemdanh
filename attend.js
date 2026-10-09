@@ -251,7 +251,7 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
       // 1. Email Google không có trong danh sách thành viên -> gian lận
       isFraud = true;
       fraudType = 'Email không có trong hệ thống';
-      claimedEmail = userEmail;
+      claimedEmail = '';
     } else {
       registeredMember = { id: memberSnap.docs[0].id, ...memberSnap.docs[0].data() };
       // 2. Tổ bộ môn: tổ giáo viên chọn phải khớp với tổ đăng ký trong hệ thống
@@ -260,7 +260,7 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
         const registeredGroupName = groupNames[registeredMember.group] || registeredMember.group;
         isFraud = true;
         fraudType = `Tổ không khớp (Hệ thống: ${registeredGroupName})`;
-        claimedEmail = userEmail;
+        claimedEmail = registeredMember.email || userEmail;
       }
     }
 
