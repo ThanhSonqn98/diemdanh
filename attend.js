@@ -311,39 +311,5 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
   }
 });
 
-// ---- Đổi tài khoản Google khác để điểm danh ----
-async function handleSignOutAndSwitch() {
-  try {
-    await auth.signOut();
-    userEmail = null;
-    userName = null;
-    const nameInput = document.getElementById('input-name');
-    if (nameInput) nameInput.value = '';
-    const groupSelect = document.getElementById('input-group');
-    if (groupSelect) groupSelect.value = '';
-    const chkAbsent = document.getElementById('chk-absent');
-    if (chkAbsent) chkAbsent.checked = false;
-    const absentSection = document.getElementById('absent-reason-section');
-    if (absentSection) absentSection.classList.add('hidden');
-    document.querySelectorAll('input[name="absent-type"]').forEach(r => r.checked = false);
-    const btn = document.getElementById('btn-submit');
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = '✅ Điểm Danh';
-    }
-    if (meetingData) {
-      document.getElementById('login-meeting-name').textContent = meetingData.name;
-    }
-    showScreen('screen-login');
-  } catch (err) {
-    alert('Lỗi đăng xuất: ' + err.message);
-  }
-}
-
-document.getElementById('btn-switch-account-already')?.addEventListener('click', handleSignOutAndSwitch);
-document.getElementById('btn-switch-account-success')?.addEventListener('click', handleSignOutAndSwitch);
-document.getElementById('btn-switch-account-form')?.addEventListener('click', handleSignOutAndSwitch);
-document.getElementById('btn-switch-account-fraud')?.addEventListener('click', handleSignOutAndSwitch);
-
 // ---- Khởi động ----
 initPage();
