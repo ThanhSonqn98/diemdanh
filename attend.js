@@ -248,25 +248,19 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
     let registeredMember = null;
 
     if (memberSnap.empty) {
-      // Email Google không có trong danh sách → gian lận (hoặc chưa đăng ký)
+      // 1. Email Google không có trong danh sách thành viên -> gian lận
       isFraud = true;
       fraudType = 'Email không có trong hệ thống';
       claimedEmail = userEmail;
     } else {
       registeredMember = { id: memberSnap.docs[0].id, ...memberSnap.docs[0].data() };
-      // Kiểm tra tên khai báo có khớp với tên đăng ký không
-      const registeredName = registeredMember.name.trim().toLowerCase();
-      const claimedName = name.trim().toLowerCase();
-      if (registeredName !== claimedName) {
-        // Tên không khớp → có thể gian lận (điểm danh hộ)
-        isFraud = true;
-        fraudType = 'Tên khai báo không khớp hệ thống';
-        claimedEmail = userEmail;
-      }
-      // Nếu khai tổ sai cũng đánh dấu
+      // 2. Tổ bộ môn: tổ giáo viên chọn phải khớp với tổ đăng ký trong hệ thống
       if (registeredMember.group && registeredMember.group !== group) {
+        const groupNames = { bgh: 'BGH', to123: 'Tổ 1-2-3', to45: 'Tổ 4-5', tobomon: 'Tổ Bộ Môn', tovanphong: 'Tổ Văn Phòng' };
+        const registeredGroupName = groupNames[registeredMember.group] || registeredMember.group;
         isFraud = true;
-        fraudType = (fraudType ? fraudType + ' & ' : '') + 'Tổ khai báo không khớp';
+        fraudType = `Tổ không khớp (Hệ thống: ${registeredGroupName})`;
+        claimedEmail = userEmail;
       }
     }
 
