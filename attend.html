@@ -10,6 +10,101 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 </head>
 <body>
+  <!-- OVERLAY HƯỚNG DẪN KHI QUÉT BẰNG ZALO / IN-APP BROWSER -->
+  <style>
+    @keyframes zaloBounce {
+      0% { transform: translateY(0px) translateX(0px); }
+      100% { transform: translateY(-7px) translateX(5px); }
+    }
+  </style>
+  <div id="zalo-overlay" style="display:none; position:fixed; inset:0; z-index:9999999; background:rgba(15,23,42,0.96); color:white; flex-direction:column; align-items:center; justify-content:center; padding:20px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; text-align:center; box-sizing:border-box;">
+    
+    <!-- Mũi tên chỉ vào dấu 3 chấm góc trên bên phải Zalo -->
+    <div style="position:fixed; top:12px; right:16px; display:flex; align-items:center; gap:8px; color:#38bdf8; font-weight:700; font-size:14px; animation:zaloBounce 0.9s infinite alternate; pointer-events:none;">
+      <span>Bấm dấu 3 chấm ở đây</span>
+      <span style="font-size:26px;">↗️</span>
+    </div>
+
+    <div style="background:#1e293b; border:1px solid #334155; border-radius:18px; padding:28px 22px; max-width:390px; width:100%; box-shadow:0 25px 50px -12px rgba(0,0,0,0.6);">
+      <div style="font-size:52px; margin-bottom:12px;">🌐</div>
+      <h2 style="font-size:19px; font-weight:700; margin-bottom:8px; color:#f8fafc;">Vui lòng mở bằng Trình duyệt</h2>
+      <p style="font-size:13px; color:#94a3b8; margin-bottom:20px; line-height:1.5;">
+        Trình duyệt Zalo chặn đăng nhập Google. Để điểm danh, bạn hãy mở trang này bằng <strong>Chrome</strong> hoặc <strong>Safari</strong>.
+      </p>
+
+      <div style="background:#0f172a; border:1px solid #334155; border-radius:12px; padding:14px 16px; text-align:left; font-size:13px; color:#e2e8f0; margin-bottom:20px; line-height:1.6;">
+        <div style="margin-bottom:10px; display:flex; gap:10px; align-items:flex-start;">
+          <span style="background:#38bdf8; color:#0f172a; border-radius:50%; width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; flex-shrink:0;">1</span>
+          <span>Bấm biểu tượng <strong>dấu 3 chấm (•••)</strong> ở góc trên bên phải màn hình Zalo.</span>
+        </div>
+        <div style="display:flex; gap:10px; align-items:flex-start;">
+          <span style="background:#38bdf8; color:#0f172a; border-radius:50%; width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; flex-shrink:0;">2</span>
+          <span>Chọn <strong>"Mở bằng trình duyệt"</strong> (Safari / Chrome).</span>
+        </div>
+      </div>
+
+      <!-- Nút mở Chrome cho Android -->
+      <div id="zalo-android-wrap" style="display:none; margin-bottom:12px;">
+        <button type="button" onclick="openExternalBrowser()" style="width:100%; padding:14px 20px; background:#4f46e5; color:white; border:none; border-radius:10px; font-size:15px; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 4px 12px rgba(79,70,229,0.4);">
+          🚀 Bấm để mở bằng Google Chrome
+        </button>
+      </div>
+
+      <!-- Nút sao chép link -->
+      <button type="button" onclick="copyCurrentUrl()" style="width:100%; padding:12px 18px; background:transparent; color:#cbd5e1; border:1px solid #475569; border-radius:10px; font-size:14px; font-weight:500; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+        📋 Sao chép link điểm danh
+      </button>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var ua = navigator.userAgent || navigator.vendor || window.opera || '';
+      var isZalo = /Zalo/i.test(ua);
+      var isInApp = isZalo || /FBAN|FBAV|Instagram|TikTok|Line/i.test(ua);
+      var isAndroid = /Android/i.test(ua);
+
+      if (isInApp) {
+        var overlay = document.getElementById('zalo-overlay');
+        if (overlay) overlay.style.display = 'flex';
+
+        if (isAndroid) {
+          var btnWrap = document.getElementById('zalo-android-wrap');
+          if (btnWrap) btnWrap.style.display = 'block';
+
+          // Tự động chuyển hướng mở Chrome trên Android
+          try {
+            var cleanUrl = window.location.href.replace(/^https?:\/\//, '');
+            window.location.href = 'intent://' + cleanUrl + '#Intent;scheme=https;package=com.android.chrome;end;';
+          } catch (e) {
+            console.warn(e);
+          }
+        }
+      }
+    })();
+
+    function openExternalBrowser() {
+      var cleanUrl = window.location.href.replace(/^https?:\/\//, '');
+      window.location.href = 'intent://' + cleanUrl + '#Intent;scheme=https;package=com.android.chrome;end;';
+      setTimeout(function() {
+        window.location.href = 'intent://' + cleanUrl + '#Intent;scheme=https;end;';
+      }, 600);
+    }
+
+    function copyCurrentUrl() {
+      var url = window.location.href;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function() {
+          alert('✅ Đã sao chép link điểm danh!\nBạn hãy mở ứng dụng Chrome hoặc Safari rồi Dán (Paste) link vào thanh địa chỉ nhé.');
+        }).catch(function() {
+          prompt('Copy link này và dán vào Chrome/Safari:', url);
+        });
+      } else {
+        prompt('Copy link này và dán vào Chrome/Safari:', url);
+      }
+    }
+  </script>
+
   <div class="attendance-page">
     <div class="attendance-card">
 
@@ -167,7 +262,7 @@
     </div>
   </div>
 
-  <script src="firebase-init.js?v=3.0"></script>
-  <script src="attend.js?v=3.0"></script>
+  <script src="firebase-init.js?v=3.1"></script>
+  <script src="attend.js?v=3.1"></script>
 </body>
 </html>
