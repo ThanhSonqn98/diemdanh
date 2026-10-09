@@ -169,12 +169,14 @@ async function onUserLoggedIn() {
   document.getElementById('form-meeting-name').textContent = meetingData.name;
   const startTime = meetingData.startTime?.toDate ? meetingData.startTime.toDate() : new Date(meetingData.startTime);
   document.getElementById('form-meeting-time').textContent = '📅 ' + startTime.toLocaleString('vi-VN');
+  // Hiển thị email Google đã xác minh trên máy
   document.getElementById('display-email').textContent = userEmail;
 
-  // Pre-fill tên nếu có
-  if (userName) {
-    document.getElementById('input-name').value = userName;
-  }
+  // Gợi ý tên tài khoản Google (giáo viên có thể tự gõ/chỉnh sửa theo ý mình)
+  document.getElementById('input-name').value = userName || '';
+
+  // Để trống tổ để giáo viên tự chọn
+  document.getElementById('input-group').value = '';
 
   showScreen('screen-form');
 }
@@ -215,7 +217,7 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = '⏳ Đang xử lý...';
 
-  // Kiểm tra thời gian điểm danh lần nữa (phòng trường hợp bấm gửi trước giờ hoặc sau khi hết hạn)
+  // Kiểm tra thời gian điểm danh lần nữa
   const now = new Date();
   const startTime = meetingData.startTime?.toDate ? meetingData.startTime.toDate() : new Date(meetingData.startTime);
   const endTime = meetingData.endTime?.toDate ? meetingData.endTime.toDate() : new Date(meetingData.endTime);
