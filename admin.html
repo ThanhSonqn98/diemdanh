@@ -158,7 +158,10 @@
         <div class="detail-section">
           <div class="detail-header">
             <h2 id="detail-group-title">Chi tiết điểm danh</h2>
-            <button id="btn-export" class="btn-export">📥 Xuất Excel</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="btn-export" class="btn-export">📥 Xuất điểm danh</button>
+              <button id="btn-export-absent" class="btn-export" style="background:#ef4444">📋 Xuất danh sách vắng</button>
+            </div>
           </div>
           <div class="table-wrapper">
             <table id="attendance-table" class="data-table">
@@ -389,6 +392,7 @@
             <select id="fraud-meeting-filter" class="select-control">
               <option value="">-- Tất cả cuộc họp --</option>
             </select>
+            <button id="btn-export-fraud" class="btn-export" style="background:#ef4444">📥 Xuất Excel</button>
           </div>
         </div>
         <div class="fraud-info">

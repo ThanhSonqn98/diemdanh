@@ -993,22 +993,27 @@ function renderAttendanceTable(data, groupTitle) {
     let statusBadge = '';
     if (a.status === 'present') statusBadge = '<span class="badge badge-present">✅ Có mặt</span>';
     else if (a.status === 'excused') statusBadge = '<span class="badge badge-excused">📝 Vắng có phép</span>';
+    else if (a.status === 'absent') statusBadge = '<span class="badge" style="background:#f3f4f6;color:#6b7280;border:1px dashed #d1d5db">⬜ Chưa điểm danh</span>';
     else statusBadge = '<span class="badge badge-unexcused">❌ Vắng KP</span>';
 
-    const editBtn = isSuperAdmin
+    // Người chưa điểm danh (absent) không có id thực → không có nút Sửa
+    const editBtn = (isSuperAdmin && a.id)
       ? `<button class="btn-edit" onclick="editAttendance('${a.id}')" style="font-size:12px;padding:4px 10px">✏️ Sửa</button>`
       : '';
+
+    const statusCellId = a.id ? `id="status-${a.id}"` : '';
 
     tr.innerHTML = `
       <td>${i + 1}</td>
       <td>${a.memberName || '--'}</td>
       <td>${GROUP_NAMES[a.group] || '--'}</td>
-      <td id="status-${a.id}">${statusBadge}</td>
+      <td ${statusCellId}>${statusBadge}</td>
       <td style="font-size:12px">${a.email || '--'}</td>
-      <td style="font-size:12px">${formatDateTime(a.timestamp)}</td>
+      <td style="font-size:12px">${a.status === 'absent' ? '<span style="color:#9ca3af;font-style:italic">--</span>' : formatDateTime(a.timestamp)}</td>
       <td>${a.note || ''}</td>
       ${isSuperAdmin ? `<td>${editBtn}</td>` : ''}
     `;
+    if (a.status === 'absent') tr.style.opacity = '0.65';
     tbody.appendChild(tr);
   });
   if (!data.length) {
@@ -1093,11 +1098,31 @@ document.querySelectorAll('.btn-view-detail').forEach(btn => {
   btn.addEventListener('click', () => {
     const group = btn.dataset.group;
     currentDetailGroup = group;
-    const filtered = allAttendances.filter(a => !a.isFraud && a.group === group);
-    renderAttendanceTable(filtered, GROUP_NAMES[group]);
+
+    // Người đã điểm danh trong tổ (không gian lận)
+    const attended = allAttendances.filter(a => !a.isFraud && a.group === group);
+    const attendedEmails = new Set(attended.map(a => (a.email || '').toLowerCase()));
+
+    // Người thuộc tổ nhưng chưa điểm danh → tạo object giả status 'absent'
+    const absentInGroup = allMembers
+      .filter(m => m.group === group && !attendedEmails.has((m.email || '').toLowerCase()))
+      .map(m => ({
+        id: null,
+        memberName: m.name,
+        email: m.email,
+        group: m.group,
+        status: 'absent',
+        timestamp: null,
+        note: ''
+      }));
+
+    // Gộp: người đã điểm danh trước, người vắng sau
+    const combined = [...attended, ...absentInGroup];
+    renderAttendanceTable(combined, GROUP_NAMES[group]);
     document.querySelector('.detail-section').scrollIntoView({ behavior: 'smooth' });
   });
 });
+
 
 // Export Excel - attendance
 document.getElementById('btn-export').addEventListener('click', () => {
@@ -1116,6 +1141,39 @@ document.getElementById('btn-export').addEventListener('click', () => {
   XLSX.utils.book_append_sheet(wb, ws, 'Diểm danh');
   XLSX.writeFile(wb, `diemdanh_${(meeting?.name || 'cuochop').replace(/\s/g, '_')}.xlsx`);
 });
+
+// Export Excel - danh sách vắng
+document.getElementById('btn-export-absent').addEventListener('click', () => {
+  if (!currentMeetingId) {
+    showToast('Vui lòng chọn cuộc họp trước!', 'error');
+    return;
+  }
+  const meeting = allMeetings.find(m => m.id === currentMeetingId);
+  // Email đã điểm danh hợp lệ (không gian lận)
+  const attendedEmails = new Set(
+    allAttendances.filter(a => !a.isFraud).map(a => (a.email || '').toLowerCase())
+  );
+  // Người vắng = thành viên chưa có trong danh sách điểm danh
+  const absentMembers = allMembers.filter(m => !attendedEmails.has((m.email || '').toLowerCase()));
+
+  if (!absentMembers.length) {
+    showToast('Tất cả thành viên đã điểm danh!', 'success');
+    return;
+  }
+
+  const rows = absentMembers.map((m, i) => ({
+    'STT': i + 1,
+    'Họ tên': m.name || '',
+    'Email': m.email || '',
+    'Tổ': GROUP_NAMES[m.group] || m.group || '',
+    'Chức vụ': m.role || ''
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Vắng mặt');
+  XLSX.writeFile(wb, `vang_mat_${(meeting?.name || 'cuochop').replace(/\s/g, '_')}.xlsx`);
+});
+
 
 function getAttendUrl(meetingId, token) {
   const base = window.location.href.split('?')[0].split('#')[0];
@@ -1397,8 +1455,42 @@ document.getElementById('btn-export-summary').addEventListener('click', () => {
 });
 
 // ---- FRAUD DETECTION ----
+let allFraudData = []; // lưu để dùng cho xuất Excel
+
 document.getElementById('fraud-meeting-filter').addEventListener('change', async (e) => {
   await loadFraudData(e.target.value || null);
+});
+
+// Xuất Excel danh sách gian lận
+document.getElementById('btn-export-fraud').addEventListener('click', () => {
+  if (!allFraudData.length) {
+    showToast('Không có dữ liệu gian lận để xuất!', 'error');
+    return;
+  }
+  const rows = allFraudData.map((f, i) => {
+    const meeting = allMeetings.find(m => m.id === f.meetingId);
+    const regMember = allMembers.find(m => (m.email || '').toLowerCase() === (f.email || '').toLowerCase());
+    let systemEmail = '';
+    if (regMember) systemEmail = regMember.email;
+    else if (f.claimedEmail && f.claimedEmail.toLowerCase() !== (f.email || '').toLowerCase()) systemEmail = f.claimedEmail;
+    else systemEmail = 'Chưa có trong hệ thống';
+    return {
+      'STT': i + 1,
+      'Cuộc họp': meeting?.name || f.meetingId,
+      'Tên khai báo': f.memberName || '--',
+      'Email trong hệ thống': systemEmail,
+      'Email đăng nhập thực': f.email || '--',
+      'Loại vi phạm': f.fraudType || 'Không hợp lệ',
+      'Thời gian': formatDateTime(f.timestamp)
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  const filterVal = document.getElementById('fraud-meeting-filter').value;
+  const filterMeeting = allMeetings.find(m => m.id === filterVal);
+  const suffix = filterMeeting ? filterMeeting.name.replace(/\s/g, '_') : 'tat_ca';
+  XLSX.utils.book_append_sheet(wb, ws, 'Gian lan');
+  XLSX.writeFile(wb, `gian_lan_${suffix}.xlsx`);
 });
 
 async function loadFraudData(meetingId) {
@@ -1406,6 +1498,7 @@ async function loadFraudData(meetingId) {
   if (meetingId) query = query.where('meetingId', '==', meetingId);
   const snap = await query.get();
   const fraudData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  allFraudData = fraudData; // lưu lại để xuất Excel
   const tbody = document.getElementById('fraud-tbody');
   tbody.innerHTML = '';
 
